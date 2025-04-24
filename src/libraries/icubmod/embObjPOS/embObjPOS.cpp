@@ -10,14 +10,17 @@
 #include <string>
 #include <iostream>
 #include <string.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 // Yarp Includes
 #include <yarp/os/Time.h>
 #include <yarp/os/Log.h>
 #include <yarp/os/LogStream.h>
-#include <stdarg.h>
-#include <stdio.h>
 #include <yarp/dev/PolyDriver.h>
+#include <yarp/os/NetType.h>
+
+// external libraries includes
 #include <ace/config.h>
 #include <ace/Log_Msg.h>
 
@@ -25,15 +28,12 @@
 // specific to this device driver.
 #include <embObjPOS.h>
 #include <ethManager.h>
-#include <yarp/os/LogStream.h>
 #include "EoAnalogSensors.h"
 #include "EOnv_hid.h"
-
 #include "EoProtocol.h"
 #include "EoProtocolMN.h"
 #include "EoProtocolAS.h"
 
-#include <yarp/os/NetType.h>
 
 #ifdef WIN32
 #pragma warning(once:4355)
@@ -252,69 +252,54 @@ bool embObjPOS::initRegulars(void)
             yDebug() << "\t it added regular rop for" << nvinfo;
         }
     }
-
-
+    
     return true;
 }
 
 
-/*! Read a vector from the sensor.
- * @param out a vector containing the sensor's last readings.
- * @return AS_OK or return code. AS_TIMEOUT if the sensor timed-out.
- **/
-
-int embObjPOS::read(yarp::sig::Vector &out)
+size_t embObjPOS::getNrOfEncoderArrays() const
 {
-    // This method gives the data, received from embedded boards, to the analogServer
-
-    if(!m_PDdevice.isOpen())
-        return AS_ERROR ;
-
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    // errors are not handled for now... it'll always be OK!!
-    out=m_data;
-
-    return AS_OK;
+    return serviceConfig.idList.size(); //TODO: number of enabledSensor, i.e. 2 or 4, depending on the device
+    // REV-VALE: ==> this should be the lenght of enabled sensor list
 }
 
-
-
-int embObjPOS::getState(int ch)
+yarp::dev::MAS_status embObjPOS::getEncoderArrayStatus(size_t sens_index) const
 {
-    printf("getstate\n");
-    return AS_OK;
+    if (sens_index >= serviceConfig.idList.size()) return yarp::dev::MAS_UNKNOWN; //REV-VALE:this is wrong. I guess it is a copy-paste error. It should be 4 or the max size of sensor we can manage. Maybe in fw-shared there is already a constant for this. defined.
+    return yarp::dev::MAS_OK;
 }
 
-
-int embObjPOS::getChannels()
+bool embObjPOS::getEncoderArrayName(size_t sens_index, std::string &name) const
 {
-    return static_cast<int>(eOas_pos_data_maxnumber);
+    if (sens_index >= serviceConfig.idList.size()) return false; //REV-VALE: same as line 269
+    // TODO: we can think to add a name specific for the encoder array, such as "left_arm_pos4", cosidering that now we have the name of the 2/4 actuators which is stored in idList
+    // and not a name for the encoder array itself, which might have dimension 2 or 4, depeding if the device is related to the open-close or abductions.
+    name = serviceConfig.idList[sens_index];
+    return true;
 }
 
-
-int embObjPOS::calibrateSensor()
+bool embObjPOS::getEncoderArrayMeasure(size_t sens_index, yarp::sig::Vector& out, double& timestamp) const
 {
-    return AS_OK;
+    yDebug() << m_PDdevice.getBoardInfo() << "embObjPOS::getEncoderArrayMeasure called with sens_index=" << sens_index << "at timestamp=" << yarp::os::Time::now();
+    if (sens_index >= 1) return false;  //REV-VALE: same as line 269
+    timestamp = yarp::os::Time::now();
+    //REV-VALE:  in this case, we need to undestand which is the value sent by fw and store in m_data corresonding to the sensor _sens_index
+    /**I write here after in code what I said hoping to be more clear:
+     *  m_data_index = translate_index(sens_index);
+     * out.resize(1);
+     * out=m_data[m_data_index];
+     */
+    out.resize(1); 
+    out = m_data[sens_index]; //TODO: this should be a vector of 2 or 4 elements, depending on the device, if related to abduction or open-close. Each number is the position of the actuator.
+    return true;
 }
 
-
-int embObjPOS::calibrateSensor(const yarp::sig::Vector& value)
+size_t embObjPOS::getEncoderArraySize(size_t sens_index) const
 {
-    return AS_OK;
+    if (sens_index >= serviceConfig.idList.size()) return 0; //REV-VALE: same as line 269
+    return 1; //TODO: this should return the size of data at index sens_index, which should actually be 1.
 }
 
-
-int embObjPOS::calibrateChannel(int ch)
-{
-    return AS_OK;
-}
-
-
-int embObjPOS::calibrateChannel(int ch, double v)
-{
-    return AS_OK;
-}
 
 
 eth::iethresType_t embObjPOS::type()
@@ -327,6 +312,9 @@ bool embObjPOS::update(eOprotID32_t id32, double timestamp, void* rxdata)
 {
     // called by feat_manage_analogsensors_data() which is called by:
     // eoprot_fun_UPDT_as_pos_status
+    char nvinfo[128] = {};
+    eoprot_ID2information(id32, nvinfo, sizeof(nvinfo));
+    yDebug() << m_PDdevice.getBoardInfo() << "embObjPOS::update() called with id32=" << nvinfo;
     if(!m_PDdevice.isOpen())
         return false;
 
@@ -348,34 +336,11 @@ bool embObjPOS::update(eOprotID32_t id32, double timestamp, void* rxdata)
     return true;
 }
 
-
-
-
 bool embObjPOS::close()
 {
     cleanup();
     return true;
 }
-
-
-// void embObjPOS::printServiceConfig(void)
-// {
-//     char loc[20] = {0};
-//     char fir[20] = {0};
-//     char pro[20] = {0};
-//
-//     const char * boardname = (NULL != res) ? (res->getProperties().boardnameString.c_str()) : ("NOT-ASSIGNED-YET");
-//     const char * ipv4 = (NULL != res) ? (res->getProperties().ipv4addrString.c_str()) : ("NOT-ASSIGNED-YET");
-//
-//     parser->convert(serviceConfig.ethservice.configuration.data.as.mais.canloc, loc, sizeof(loc));
-//     parser->convert(serviceConfig.ethservice.configuration.data.as.mais.version.firmware, fir, sizeof(fir));
-//     parser->convert(serviceConfig.ethservice.configuration.data.as.mais.version.protocol, pro, sizeof(pro));
-//
-//     yInfo() << "The embObjPOS device using BOARD" << boardname << "w/ IP" << ipv4 << "has the following service config:";
-//     yInfo() << "- acquisitionrate =" << serviceConfig.acquisitionrate;
-//     yInfo() << "- MAIS named" << serviceConfig.nameOfMais << "@" << loc << "with required protocol version =" << pro << "and required firmware version =" << fir;
-// }
-
 
 void embObjPOS::cleanup(void)
 {

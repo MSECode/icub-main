@@ -898,7 +898,12 @@ bool ServiceParser::check_analog(Searchable &config, eOmn_serv_type_t type)
                 }
 
                 b_PROPERTIES_SENSORS_pos_CALIBRATION = Bottle(b_PROPERTIES_SENSORS.findGroup("CALIBRATION"));
-                if(b_PROPERTIES_SENSORS_pos_CALIBRATION.isNull())
+                if(!b_PROPERTIES_SENSORS_pos_CALIBRATION.isNull())
+                {
+                    yError() << "ServiceParser::check_analog() found PROPERTIES.SENSORS.CALIBRATION group. This is not allowed. CALIBRATION must be removed";
+                    return false;
+                }
+                /*
                 {
                     yWarning() << "ServiceParser::check_analog() cannot find PROPERTIES.SENSORS.CALIBRATION. Using neutral values (ROT:zero, 0.0, false)";
                 }
@@ -926,8 +931,7 @@ bool ServiceParser::check_analog(Searchable &config, eOmn_serv_type_t type)
                         yWarning() << "ServiceParser::check_analog() cannot find PROPERTIES.SENSORS.CALIBRATION.invertDirection. Using value false";
                     }
                 }
-
-
+                */
             }
             else
             {
@@ -4324,6 +4328,13 @@ bool ServiceParser::parseService(Searchable &config, servConfigMC_t &mcconfig)
                 pos->config.boardconfig[b].canloc.addr = mc_service.properties.poslocations[b].addr;
                 pos->config.boardconfig[b].canloc.port = mc_service.properties.poslocations[b].port;
 
+                // check if we have even 1 FAP board configured and send an error. Calibration group should not be present
+                // if(pos->config.boardconfig[b].sensors[0].type != nan)
+                // {
+                //     yError() << "ServiceParser::parseService() found PROPERTIES.SENSORS.CALIBRATION group in MC SERVICE. This is not allowed. CALIBRATION must be removed";
+                //     return false;
+                // }
+                /*
                 for(size_t s=0; s<eOas_pos_sensorsinboard_maxnumber; s++)
                 {
                     pos->config.boardconfig[b].sensors[s].connector = s;
@@ -4334,6 +4345,7 @@ bool ServiceParser::parseService(Searchable &config, servConfigMC_t &mcconfig)
                     pos->config.boardconfig[b].sensors[s].rotation = eoas_pos_ROT_zero;
                     pos->config.boardconfig[b].sensors[s].offset = 0;
                 }
+                */
             }
 
 #if 0
