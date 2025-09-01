@@ -17,14 +17,25 @@ YARP_LOG_COMPONENT(RAWVALUESPUBLISHERREMAPPER, "yarp.device.rawvaluespublisherre
 
 bool RawValuesPublisherRemapper::open(yarp::os::Searchable& config)
 {
-    if(!parseParams(config))
+    yarp::os::Property prop;
+    prop.fromString(config.toString());
+
+    m_verbose = (prop.check("verbose","if present, give detailed output"));
+    if (m_verbose)
     {
+        yCInfo(RAWVALUESPUBLISHERREMAPPER, "Running with verbose output\n");
+    }
+
+    if(!parseParams(prop))
+    {
+        yCError(RAWVALUESPUBLISHERREMAPPER) << "Error parsing configuration parameters";
         return false;
     }
 
     yCDebug(RAWVALUESPUBLISHERREMAPPER) << "RawValuesPublisherRemapper device started";
     for (const auto& name : m_axesNames)
     {
+        //TODO: debug print to be removed once the remapper will be fully implemented
         yCDebug(RAWVALUESPUBLISHERREMAPPER) << "Axes Name: " << name;
     }
     return true;
@@ -37,6 +48,34 @@ bool RawValuesPublisherRemapper::close()
 
 bool RawValuesPublisherRemapper::attachAll(const yarp::dev::PolyDriverList& drivers)
 {
+    if (drivers.size() < 1)
+    {
+        yCError(RAWVALUESPUBLISHERREMAPPER) << "attachAll: cannot attach to less than one device";
+        return false;
+    }
+    yCDebug(RAWVALUESPUBLISHERREMAPPER) << "Attaching to " << drivers.size() << " devices";
+    m_remappedControlBoards.resize(drivers.size());
+    for (size_t i = 0; i < drivers.size(); i++)
+    {
+        yarp::dev::PolyDriver* poly = drivers[i]->poly;
+        if (!poly)
+        {
+            yCError(RAWVALUESPUBLISHERREMAPPER) << "NullPointerException when getting the polyDriver at attachAll.";
+            detachAll();
+            return false;
+        }
+
+        yCDebug(RAWVALUESPUBLISHERREMAPPER) << "Attaching to device " << drivers[i]->key.c_str();
+
+        // View all the interfaces
+        if (!poly->view(m_remappedControlBoards[i]))
+        {
+            yCError(RAWVALUESPUBLISHERREMAPPER) << "Failure in viewing raw values publisher interface";
+            detachAll();
+            return false;
+        }
+    }
+
     return true;
 }
 
