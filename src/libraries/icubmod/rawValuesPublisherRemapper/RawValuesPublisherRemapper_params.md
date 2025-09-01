@@ -1,0 +1,2 @@
+ * |         |  axesNames          | vector<string>  | -              |   -           | Yes        | List of axes names                          |  |
+ * |         |  joints        | int     | ms             |   -           | Yes        | Number of control boards to be remapped                    |  |
