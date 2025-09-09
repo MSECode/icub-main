@@ -21,7 +21,7 @@ class RawValuesPublisherRemapper :
 
     private:
     bool m_verbose{false};
-    std::vector<iCub::debugLibrary::IRawValuesPublisher*> m_remappedControlBoards;
+    std::vector<iCub::debugLibrary::IRawValuesPublisher*> m_remappedControlBoards {nullptr};
     
 public:
 
