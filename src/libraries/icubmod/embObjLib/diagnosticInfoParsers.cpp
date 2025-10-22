@@ -722,6 +722,7 @@ void MotionControlParser::parseInfo()
         case eoerror_value_MC_motor_can_no_answer:
         case eoerror_value_MC_axis_torque_sens:
         case eoerror_value_MC_joint_hard_limit:
+        case eoerror_value_MC_joint_software_limit:
         {
             uint8_t joint_num = m_dnginfo.param16 & 0x00ff;
             m_entityNameProvider.getAxisName(joint_num, m_dnginfo.baseInfo.axisName);
