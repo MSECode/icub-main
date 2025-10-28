@@ -19,7 +19,8 @@ if(ENABLE_fineCalibrationChecker)
   target_link_libraries(fineCalibrationChecker PRIVATE YARP::YARP_os
                                                       YARP::YARP_dev
                                                       ICUB::iCubDev
-                                                      ${OpenCV_LIBS})
+                                                      ${OpenCV_LIBS}
+                                                      ethResources)
                                                       
   list(APPEND YARP_${YARP_PLUGIN_MASTER}_PRIVATE_DEPS YARP_os
                                                       YARP_dev)

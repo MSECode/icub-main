@@ -36,6 +36,7 @@
 #include <yarp/dev/IControlCalibration.h>
 #include <yarp/dev/IMotor.h>
 #include <yarp/dev/IEncoders.h>
+#include <yarp/dev/IRemoteVariables.h>
 
 // iCub includes
 #include <iCub/IRawValuesPublisher.h>
@@ -103,10 +104,8 @@ private:
     // Private members
 
     // Configuration parameters
-    std::string _portPrefix = "/fineCalibrationChecker";
     std::string _robotName= "";
     std::string _deviceName= "fineCalibrationChecker";
-    std::string _remoteRawValuesPort = "";
     bool _withGui = false;
 
     deviceStatus _deviceStatus = deviceStatus::NONE;
@@ -115,7 +114,6 @@ private:
     yarp::os::Bottle _goldPositionsList = yarp::os::Bottle();
     yarp::os::Bottle _encoderResolutionsList = yarp::os::Bottle();
     yarp::os::Bottle _calibrationDeltasList = yarp::os::Bottle();
-    yarp::os::Bottle _axesSignsList = yarp::os::Bottle();
 
     std::vector<std::string> _robotSubpartsWrapper = {"setup_mc", "head", "left_arm", "right_arm", "torso", "left_leg", "right_leg"};
     std::map<std::string, std::vector<std::int32_t>> rawDataValuesMap;
@@ -130,6 +128,7 @@ private:
         yarp::dev::IControlCalibration* _icontrolcalib { nullptr };
         yarp::dev::IMotor* _imot { nullptr };
         yarp::dev::IEncoders* _ienc { nullptr };
+        yarp::dev::IRemoteVariables* _iremotevars { nullptr };
     } remappedControlBoardInterfaces;
 
     struct
