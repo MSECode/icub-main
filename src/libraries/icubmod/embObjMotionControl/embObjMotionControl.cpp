@@ -1339,7 +1339,7 @@ bool embObjMotionControl::init()
     {
         protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, n, eoprot_tag_mc_joint_status_core);
         id32v.push_back(protid);
-        protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, n, eoprot_tag_mc_joint_status_addinfo_multienc);
+        protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, n, eoprot_tag_mc_joint_status_rawinfo);
         id32v.push_back(protid);
         protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_motor, n, eoprot_tag_mc_motor_status);
         id32v.push_back(protid);
@@ -1551,9 +1551,9 @@ bool embObjMotionControl::init()
     ///////////////////////////////////////////////
     // intialize the map of the rawValuesVectors //
     //////////////////////////////////////////////
-    const char* tag = eoprot_TAG2string(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, eoprot_tag_mc_joint_status_addinfo_multienc);                              
+    const char* tag = eoprot_TAG2string(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, eoprot_tag_mc_joint_status_rawinfo);                              
     
-    _rawValuesMetadataMap.insert({{tag, rawValuesKeyMetadata({}, {}, _njoints * eOmc_joint_multienc_maxnum)}});
+    _rawValuesMetadataMap.insert({{tag, rawValuesKeyMetadata({}, {}, _njoints * eOmc_encoder_on_device_maxnumberof)}});
     for (auto &[k, v] : _rawValuesMetadataMap)
     {
         std::string auxstring = "";
@@ -5640,20 +5640,35 @@ bool embObjMotionControl::getLastJointFaultRaw(int j, int& fault, std::string& m
 
 bool embObjMotionControl::getRawData_core(std::string key, std::vector<std::int32_t> &data)
 {
+    static int no_flood_debug = 0;
     // Here I need to be sure 100% the key exists!!! 
     // It must exists since the call is made while iterating over the map
     data.clear();
     for(int j=0; j< _njoints; j++)
     {
-        eOmc_joint_status_additionalInfo_t addinfo;
-        eOprotID32_t protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, j, eoprot_tag_mc_joint_status_addinfo_multienc);
-        if(!res->getLocalValue(protid, &addinfo))
+        eOmc_joint_status_rawinfo_t rawinfo;
+        eOprotID32_t protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, j, eoprot_tag_mc_joint_status_rawinfo);
+        if(!res->getLocalValue(protid, &rawinfo))
         {
             return false;
         }
-        for (int k = 0; k < std::size(addinfo.multienc); k++)
+        int rawinfo_size = sizeof(rawinfo.any) / sizeof(rawinfo.any[0]);
+        for (int k = 0; k < rawinfo_size; k++)
         {
-            data.push_back((int32_t)addinfo.multienc[k]);
+            data.push_back((int32_t)rawinfo.rawInfoEncoderData.primary_encoder.encoder_value);
+        }
+        
+        protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, j, eoprot_tag_mc_joint_status_rawinfo);
+        if (!res->getLocalValue(protid, &rawinfo))
+        {
+            yError() << getBoardInfo() << "getRawData failed. Cannot retrieve all raw data from local memory";
+            return false;
+        }
+
+        if(++no_flood_debug > 100)
+        {
+            yDebug() << "Joint" << j << "raw primary encoder info:" << rawinfo.rawInfoEncoderData.primary_encoder.encoder_value;
+            no_flood_debug = 0;
         }
         
     }

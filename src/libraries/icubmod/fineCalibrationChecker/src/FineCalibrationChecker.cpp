@@ -568,7 +568,7 @@ void FineCalibrationChecker::evaluateHardStopPositionDelta(const std::string& ke
                 goldPosition = it->second[0];
                 resolution = it->second[1];
                 homePositions[i] = (resolution > 0) ? pos : -pos; // Update home position for the axis
-                rawPosition = rawData[RAW_VALUES_STRIDE*i]; // This because the raw values for tag eoprot_tag_mc_joint_status_addinfo_multienc
+                rawPosition = rawData[RAW_VALUES_STRIDE*i]; // This because the raw values for tag eoprot_tag_mc_joint_status_rawinfo
                                             // are stored in a vector whose legth is joints_number*3, where each sub-array is made such
                                             // [raw_val_primary_enc, raw_val_secondary_enc, rraw_val_auxiliary_enc]
                                             // and we want the first value for each joint

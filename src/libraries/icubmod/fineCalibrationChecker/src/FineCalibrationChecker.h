@@ -119,7 +119,7 @@ private:
     std::map<std::string, std::vector<std::int32_t>> rawDataValuesMap;
     iCub::rawValuesKeyMetadataMap rawDataMetadata;
     std::map<std::string, std::array<int32_t, 2>> axesRawGoldenPositionsResMap;
-    std::string _rawValuesTag = "eoprot_tag_mc_joint_status_addinfo_multienc";
+    std::string _rawValuesTag = "eoprot_tag_mc_joint_status_rawinfo";
 
     // Pointers to interfaces
     struct

@@ -841,12 +841,12 @@ void HostTransceiver::eoprot_override_mc(void)
             EO_INIT(.init)          NULL,
             EO_INIT(.update)        eoprot_fun_UPDT_mc_joint_status_debug
         },
-        {   // joint_status_basic: used to inform the motioncontrol device that a sig<> ROP about joint status has arrived. for .. updating the same timestamps as above
+        {   // joint_status_rawinfo: used to inform the motioncontrol device that a sig<> ROP about joint status rawinfo has arrived. for .. updating the same timestamps as above
             EO_INIT(.endpoint)      eoprot_endpoint_motioncontrol,
             EO_INIT(.entity)        eoprot_entity_mc_joint,
-            EO_INIT(.tag)           eoprot_tag_mc_joint_status_addinfo_multienc,
+            EO_INIT(.tag)           eoprot_tag_mc_joint_status_rawinfo,
             EO_INIT(.init)          NULL,
-            EO_INIT(.update)        eoprot_fun_UPDT_mc_joint_status_addinfo_multienc
+            EO_INIT(.update)        eoprot_fun_UPDT_mc_joint_status_rawinfo
         },
             {   // joint_status_basic: used to inform the motioncontrol device that a sig<> ROP about joint status has arrived. for .. updating the same timestamps as above
             EO_INIT(.endpoint)      eoprot_endpoint_motioncontrol,
