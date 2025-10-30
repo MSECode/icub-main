@@ -93,9 +93,9 @@ extern void eoprot_fun_UPDT_mc_joint_status(const EOnv* nv, const eOropdescripto
 }
 
 
-extern void eoprot_fun_UPDT_mc_joint_status_addinfo_multienc(const EOnv* nv, const eOropdescriptor_t* rd)
+extern void eoprot_fun_UPDT_mc_joint_status_rawinfo(const EOnv* nv, const eOropdescriptor_t* rd)
 {
-    feat_manage_motioncontrol_addinfo_multienc(eo_nv_GetIP(nv), rd->id32, (void *)rd->data);
+    feat_manage_motioncontrol_data(eo_nv_GetIP(nv), rd->id32, (void *)rd->data);
 }
 
 // --------------------------------------------------------------------------------------------------------------------

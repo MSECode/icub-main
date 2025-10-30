@@ -347,7 +347,6 @@ bool embObjMotionControl::initializeInterfaces(measureConvFactors &f)
 bool embObjMotionControl::open(yarp::os::Searchable &config)
 {
     // - first thing to do is verify if the eth manager is available. then i parse info about the eth board.
-
     ethManager = eth::TheEthManager::instance();
     if(NULL == ethManager)
     {
@@ -5640,23 +5639,34 @@ bool embObjMotionControl::getLastJointFaultRaw(int j, int& fault, std::string& m
 
 bool embObjMotionControl::getRawData_core(std::string key, std::vector<std::int32_t> &data)
 {
+    //TODO: 0 - since we wanna stay general the getRawData should point to a void ptr as the data container or using function pointers with a callback
+    //TODO: 1 - make function for getting tag from key
+    //TODO: 2 - define how to add to data different raw info depending of the key
+    //TODO: 3 - think how to generalize the push back, e.g. when we have same data for differnt types of encoders, it is better to do a single call over
+    //          the different encoders instead of duplicating the code for each type of encoder
+    //TODO: 4 - eventually keep in mind that struct might be modified --> different raw info are thought as unions since we address one per time depending on the key
+
     static int no_flood_debug = 0;
     // Here I need to be sure 100% the key exists!!! 
     // It must exists since the call is made while iterating over the map
     data.clear();
     for(int j=0; j< _njoints; j++)
     {
+
         eOmc_joint_status_rawinfo_t rawinfo;
         eOprotID32_t protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, j, eoprot_tag_mc_joint_status_rawinfo);
         if(!res->getLocalValue(protid, &rawinfo))
         {
             return false;
         }
-        int rawinfo_size = sizeof(rawinfo.any) / sizeof(rawinfo.any[0]);
-        for (int k = 0; k < rawinfo_size; k++)
-        {
-            data.push_back((int32_t)rawinfo.rawInfoEncoderData.primary_encoder.encoder_value);
-        }
+       
+        // push back elements in data
+        data.push_back(rawinfo.rawInfoEncoderData.primary_encoder.encoder_value);
+        data.push_back(rawinfo.rawInfoEncoderData.primary_encoder.encoder_diagnostic);
+        data.push_back(rawinfo.rawInfoEncoderData.secondary_encoder.encoder_value);
+        data.push_back(rawinfo.rawInfoEncoderData.secondary_encoder.encoder_diagnostic);
+        data.push_back(rawinfo.rawInfoEncoderData.auxiliary_encoder.encoder_value);
+        data.push_back(rawinfo.rawInfoEncoderData.auxiliary_encoder.encoder_diagnostic);
         
         protid = eoprot_ID_get(eoprot_endpoint_motioncontrol, eoprot_entity_mc_joint, j, eoprot_tag_mc_joint_status_rawinfo);
         if (!res->getLocalValue(protid, &rawinfo))
@@ -5665,7 +5675,7 @@ bool embObjMotionControl::getRawData_core(std::string key, std::vector<std::int3
             return false;
         }
 
-        if(++no_flood_debug > 100)
+        if(++no_flood_debug > 1000)
         {
             yDebug() << "Joint" << j << "raw primary encoder info:" << rawinfo.rawInfoEncoderData.primary_encoder.encoder_value;
             no_flood_debug = 0;

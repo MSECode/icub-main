@@ -45,7 +45,7 @@ const eOysystem_cfg_t * feat_getSYSconfig();
 
 eObool_t feat_manage_motioncontrol_data(eOipv4addr_t ipv4, eOprotID32_t id32, void* rxdata);
 
-eObool_t feat_manage_motioncontrol_addinfo_multienc(eOipv4addr_t ipv4, eOprotID32_t id32, void* rxdata);
+// eObool_t feat_manage_motioncontrol_rawinfo(eOipv4addr_t ipv4, eOprotID32_t id32, void* rxdata);
 
 eObool_t feat_manage_skin_data(eOipv4addr_t ipv4, eOprotID32_t id32, void *arrayofcandata);
 
