@@ -27,6 +27,12 @@ namespace stereo_calib
         StereoFull      // validate obs -> calibrate left and right -> stereo calib with fixed intrinsics -> stereo rectification -> evaluate rectification quality -> populate result with all fields
     };
 
+    enum class CameraModel
+    {
+        Pinhole,
+        Fisheye
+    };
+
     struct ChessboardConfiguration
     {
         int cornersX{0};
@@ -120,6 +126,45 @@ namespace stereo_calib
         }
     };
     
+    struct PinholeCalibrationOptions
+    {
+        CalibrationMode calibrationMode{CalibrationMode::StereoFull};
+
+        cv::Size imageSize{1920, 1080};
+        double cameraFocalLengthGuess{625.0};
+
+        int monocularFlags{
+            // cv::CALIB_USE_INTRINSIC_GUESS | to be added later if performance is not good enough
+            // cv::CALIB_FIX_PRINCIPAL_POINT |
+            cv::CALIB_FIX_K3 | 
+            cv::CALIB_FIX_K4 |
+            cv::CALIB_FIX_TANGENT_DIST
+        };
+
+        int stereoFlags{
+            cv::CALIB_FIX_INTRINSIC |
+            cv::CALIB_FIX_PRINCIPAL_POINT |
+            cv::CALIB_FIX_ASPECT_RATIO |
+            cv::CALIB_FIX_K3
+        };
+
+        cv::TermCriteria criteria{
+            cv::TermCriteria::COUNT |
+            cv::TermCriteria::EPS,
+            100,
+            1e-5
+        };
+
+        bool isValid() const
+        {
+            return (imageSize.width > 0 &&
+                imageSize.height > 0 &&
+                (!(criteria.type & cv::TermCriteria::COUNT) || criteria.maxCount > 0) &&
+                (!(criteria.type & cv::TermCriteria::EPS) ||
+                 (std::isfinite(criteria.epsilon) && criteria.epsilon > 0.0)));
+        }
+    };
+    
     struct FisheyeCalibrationOptions
     {
         CalibrationMode calibrationMode{CalibrationMode::StereoFull};
@@ -169,13 +214,14 @@ namespace stereo_calib
 
     struct CameraCalibrationResult
     {
+        CameraModel model{CameraModel::Pinhole};
         cv::Size imageSize;
 
         // 3x3 intrinsic camera matrix
         cv::Mat K;
 
-        // Four fisheye coefficients: k1, k2, k3, k4.
-        // Standardize internally on 4x1 CV_64F matrix
+        // Pinhole distortion coefficients: [k1, k2 , p1, p2, k3]
+        // Fisheye distortion coefficients: [k1, k2, k3, k4]
         cv::Mat D;
 
         // Board pose for each accepted observation
@@ -187,14 +233,28 @@ namespace stereo_calib
 
         double rms{-1.0};
 
+        std::size_t expectedDistortionCoefficientsCount() const
+        {
+            switch(model)
+            {
+                case CameraModel::Pinhole:
+                    return 5;
+                case CameraModel::Fisheye:
+                    return 4;
+            }
+            return 0;
+        }
+        
         bool isValid() const
         {
             return (imageSize.width > 0 &&
                 imageSize.height > 0 &&
                 K.rows == 3 &&
                 K.cols == 3 &&
-                D.total() == 4 &&
-                rms >= 0.0);
+                D.total() == expectedDistortionCoefficientsCount() &&
+                rms >= 0.0 &&
+                cv::checkRange(K) &&
+                cv::checkRange(D));
         }
     };
 
@@ -282,6 +342,7 @@ namespace stereo_calib
 
     struct CalibrationResult
     {
+        CameraModel model{CameraModel::Pinhole};
         CalibrationMode mode{CalibrationMode::StereoFull};
 
         CameraCalibrationResult leftCamera;

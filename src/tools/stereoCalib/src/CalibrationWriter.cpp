@@ -84,11 +84,11 @@ void writeMatrix(std::ostream& output, const std::string& name, const cv::Mat& m
     output << ")\n";
 }
 
-void writeCamera(std::ostream& output, const char* side,
+void writeCamera(std::ostream& output, const char* side, std::string projection,
                  const stereo_calib::CameraCalibrationResult& camera)
 {
     output << "[CAMERA_CALIBRATION_" << side << "]\n";
-    output << "projection fisheye\n";
+    output << "projection " << projection << "\n";
     output << "drawCenterCross 0\n\n";
     output << "w " << camera.imageSize.width << "\n";
     output << "h " << camera.imageSize.height << "\n";
@@ -187,13 +187,14 @@ bool CalibrationWriter::write(const std::string& outputFile,
 
     const bool writesLeftCamera = result.mode != CalibrationMode::MonocularRight;
     const bool writesRightCamera = result.mode != CalibrationMode::MonocularLeft;
+    const std::string projection = (result.model == CameraModel::Pinhole) ? "pinhole" : "fisheye";
     if (writesLeftCamera)
     {
-        writeCamera(output, "LEFT", result.leftCamera);
+        writeCamera(output, "LEFT", projection, result.leftCamera);
     }
     if (writesRightCamera)
     {
-        writeCamera(output, "RIGHT", result.rightCamera);
+        writeCamera(output, "RIGHT", projection, result.rightCamera);
     }
 
     if (result.mode == CalibrationMode::StereoFull)

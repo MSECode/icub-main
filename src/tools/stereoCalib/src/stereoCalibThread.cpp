@@ -759,6 +759,8 @@ void stereoCalibThread::stereoCalibRun()
             }
         }
 
+        // TODO: Add pinhole engine with if-else to select between fisheye and pinhole engines based on configuration
+
         if(calibrationState.load() == CalibrationState::Calibrating)
         {
             yInfo() << "Starting the calibration process";
@@ -776,6 +778,8 @@ void stereoCalibThread::stereoCalibRun()
                 _calibrationOptions,
                 calibrationResult,
                 calibrationError);
+
+            // success and writer should be common between fisheye and pinhole engines, so this block can be shared
             if(!success)
             {
                 // The engine converts OpenCV exceptions into a diagnostic.  Log
@@ -840,7 +844,7 @@ void stereoCalibThread::stereoCalibRun()
 }
 
 
-
+/*
 void stereoCalibThread::monoCalibRun()
 {
     while(imagePortInLeft.getInputCount()==0 && imagePortInRight.getInputCount()==0)
@@ -934,9 +938,8 @@ void stereoCalibThread::monoCalibRun()
 
         }
    }
-
-
- }
+}
+*/
 void stereoCalibThread::threadRelease()
 {
     imagePortInRight.close();
@@ -997,29 +1000,6 @@ void stereoCalibThread::stopCalib() {
     yInfo() << "Calibration collection stopped";
 }
 
-void stereoCalibThread::printMatrix(Mat &matrix) {
-    int row = matrix.rows;
-    int col = matrix.cols;
-        cout << endl;
-    for(int i = 0; i < matrix.rows; i++)
-    {
-        const double* Mi = matrix.ptr<double>(i);
-        for(int j = 0; j < matrix.cols; j++)
-            cout << Mi[j] << " ";
-        cout << endl;
-    }
-        cout << endl;
-}
-
-
-bool stereoCalibThread::checkTS(double TSLeft, double TSRight, double th) {
-    double diff = fabs(TSLeft-TSRight);
-    if(diff <th)
-        return true;
-    else return false;
-
-}
-
 void stereoCalibThread::preparePath(const char * imageDir, char* pathL, char* pathR, int count) {
     char num[5];
     sprintf(num, "%i", count);
@@ -1039,18 +1019,6 @@ void stereoCalibThread::preparePath(const char * imageDir, char* pathL, char* pa
 
 }
 
-
-void stereoCalibThread::saveStereoImage(const char * imageDir, const Mat& left, const Mat& right, int num) {
-    char pathL[256];
-    char pathR[256];
-    preparePath(imageDir, pathL,pathR,num);
-
-    yInfo("Saving stereo images number %d \n",num);
-
-    imwrite(pathL,left);
-    imwrite(pathR,right);
-}
-
 void stereoCalibThread::saveImage(const char * imageDir, const Mat& left, int num) {
     char pathL[256];
     preparePath(imageDir, pathL,pathR,num);
@@ -1060,151 +1028,7 @@ void stereoCalibThread::saveImage(const char * imageDir, const Mat& left, int nu
     imwrite(pathL,left);
 }
 
-bool stereoCalibThread::updateIntrinsics(int width, int height, double fx, double fy,double cx, double cy, double k1, double k2, double k3, double k4, const string& groupname){
-
-    std::vector<string> lines;
-
-    bool append = false;
-
-    ifstream in;
-    in.open(camCalibFile.c_str()); //camCalibFile.c_str());
-
-    if(in.is_open()){
-        // file exists
-        string line;
-        bool sectionFound = false;
-        bool sectionClosed = false;
-
-        // process lines
-        while(std::getline(in, line)){
-            // check if we left calibration section
-            if (sectionFound == true && line.find("[", 0) != string::npos)
-                sectionClosed = true;   // also valid if no groupname specified
-            // check if we enter calibration section
-            if (line.find(string("[") + groupname + string("]"), 0) != string::npos)
-                sectionFound = true;
-            // if no groupname specified
-            if (groupname == "")
-                sectionFound = true;
-            // if we are in calibration section (or no section/group specified)
-            if (sectionFound == true && sectionClosed == false){
-                // replace w line
-                if (line.find("w",0) ==0){
-                    stringstream ss;
-                    ss << width;
-                    line = "w " + string(ss.str());
-                }
-                // replace h line
-                if (line.find("h",0) ==0){
-                    stringstream ss;
-                    ss << height;
-                    line = "h " + string(ss.str());
-                }
-                // replace fx line
-                if (line.find("fx",0) != string::npos){
-                    stringstream ss;
-                    ss << fx;
-                    line = "fx " + string(ss.str());
-                }
-                // replace fy line
-                if (line.find("fy",0) != string::npos){
-                    stringstream ss;
-                    ss << fy;
-                    line = "fy " + string(ss.str());
-                }
-                // replace cx line
-                if (line.find("cx",0) != string::npos){
-                    stringstream ss;
-                    ss << cx;
-                    line = "cx " + string(ss.str());
-                }
-                // replace cy line
-                if (line.find("cy",0) != string::npos){
-                    stringstream ss;
-                    ss << cy;
-                    line = "cy " + string(ss.str());
-                }
-                // replace k1 line
-                if (line.find("k1",0) != string::npos){
-                    stringstream ss;
-                    ss << k1;
-                    line = "k1 " + string(ss.str());
-                }
-                // replace k2 line
-                if (line.find("k2",0) != string::npos){
-                    stringstream ss;
-                    ss << k2;
-                    line = "k2 " + string(ss.str());
-                }
-                // replace k3 line
-                if (line.find("k3",0) != string::npos){
-                    stringstream ss;
-                    ss << k3;
-                    line = "k3 " + string(ss.str());
-                }
-                // replace k4 line
-                if (line.find("k4",0) != string::npos){
-                    stringstream ss;
-                    ss << k4;
-                    line = "k4 " + string(ss.str());
-                }
-            }
-            // buffer line
-            lines.push_back(line);
-        }
-
-        in.close();
-
-        // rewrite file
-        if (!sectionFound){
-            append = true;
-            cout << "Camera calibration parameter section " + string("[") + groupname + string("]") + " not found in file " << camCalibFile << ". Adding group..." << endl;
-        }
-        else{
-            // rewrite file
-            ofstream out;
-            out.open(camCalibFile.c_str(), ios::trunc);
-            if (out.is_open()){
-                for (int i = 0; i < (int)lines.size(); i++)
-                    out << lines[i] << endl;
-                out.close();
-            }
-            else
-                return false;
-        }
-
-    }
-    else{
-        append = true;
-    }
-
-    if (append){
-        // file doesn't exist or section is appended
-        ofstream out;
-        out.open(camCalibFile.c_str(), ios::app);
-        if (out.is_open()){
-            out << string("[") + groupname + string("]") << endl;
-            out << endl;
-            out << "w  " << width << endl;
-            out << "h  " << height << endl;
-            out << "fx " << fx << endl;
-            out << "fy " << fy << endl;
-            out << "cx " << cx << endl;
-            out << "cy " << cy << endl;
-            out << "k1 " << k1 << endl;
-            out << "k2 " << k2 << endl;
-            out << "k3 " << k3 << endl;
-            out << "k4 " << k4 << endl;
-            out << endl;
-            out.close();
-        }
-        else
-            return false;
-    }
-
-    return true;
-}
-
+/*
 double stereoCalibThread::monoCalibration(const vector<string>& imageList, int boardWidth, int boardHeight, Mat &K, Mat &Dist, const char* cameraName)
 {
     vector<vector<Point2f> > imagePoints;
@@ -1355,7 +1179,7 @@ double stereoCalibThread::monoCalibration(const vector<string>& imageList, int b
         throw;
     }
 }
-
+*/
 
 namespace {
 void logStereoCalibrationDebugInfo(const std::vector<std::vector<cv::Point2f> >& imagePointsLeft,
@@ -1579,44 +1403,7 @@ void stereoCalibThread::stereoCalibration(const vector<string>& imagelist, int b
     cout.flush();
 }
 
-
-void stereoCalibThread::saveCalibration(const string& extrinsicFilePath, const string& intrinsicFilePath){
-
-    if( Kleft.empty() || Kright.empty() || DistL.empty() || DistR.empty() || R.empty() || T.empty()) {
-            cout << "Error: cameras are not calibrated! Run the calibration or set intrinsic and extrinsic parameters \n";
-            return;
-    }
-
-    FileStorage fs(intrinsicFilePath+".yml", cv::FileStorage::Mode::WRITE);
-    if( fs.isOpened() )
-    {
-        fs << "M1" << Kleft << "D1" << DistL << "M2" << Kright << "D2" << DistR;
-        fs.release();
-    }
-    else
-        cout << "Error: can not save the intrinsic parameters\n";
-
-    fs.open(extrinsicFilePath+".yml", cv::FileStorage::Mode::WRITE);
-    if( fs.isOpened() )
-    {
-        // compute rectification and projection matrices for fisheye model
-        try {
-            Mat R1, R2, P1, P2, Qr;
-            int flags = 0; // consider fisheye::CALIB_ZERO_DISPARITY if desired
-            fisheye::stereoRectify(Kleft, DistL, Kright, DistR, this->lastImageSize, R, T, R1, R2, P1, P2, Qr, flags, Size());
-            fs << "R" << R << "T" << T << "R1" << R1 << "R2" << R2 << "P1" << P1 << "P2" << P2 << "Q" << Qr;
-        }
-        catch (const cv::Exception &e) {
-            yError("stereoRectify failed: %s", e.what());
-            fs << "R" << R << "T" << T << "Q" << Q;
-        }
-        fs.release();
-    }
-    else
-        cout << "Error: can not save the intrinsic parameters\n";
-
-}
-
+// TOBE REMOVED: this function is not used anymore, but it is kept for reference in case we want to implement a custom chessboard corner calculation in the future
 void stereoCalibThread::calcChessboardCorners(Size boardSize, float squareSize, vector<Point3f>& corners)
 {
     corners.resize(0);
@@ -1631,102 +1418,4 @@ void stereoCalibThread::calcChessboardCorners(Size boardSize, float squareSize, 
                 corners.push_back(Point3f(float(j*squareSize),
                                           float(i*squareSize), 0));
     }
-}
-
-bool stereoCalibThread::updateExtrinsics(Mat Rot, Mat Tr, const string& groupname)
-{
-    std::vector<string> lines;
-    bool append = false;
-
-    ifstream in;
-    in.open(camCalibFile.c_str()); //camCalibFile.c_str());
-
-    if(in.is_open()){
-        // file exists
-        string line;
-        bool sectionFound = false;
-        bool sectionClosed = false;
-
-        // process lines
-        while(std::getline(in, line)){
-            // check if we left calibration section
-            if (sectionFound == true && line.find("[", 0) != string::npos)
-                sectionClosed = true;   // also valid if no groupname specified
-            // check if we enter calibration section
-            if (line.find(string("[") + groupname + string("]"), 0) != string::npos)
-                sectionFound = true;
-            // if no groupname specified
-            if (groupname == "")
-                sectionFound = true;
-            // if we are in calibration section (or no section/group specified)
-            if (sectionFound == true && sectionClosed == false){
-                // replace w line
-                if (line.find("HN",0) != string::npos){
-                    stringstream ss;
-                    ss << " (" << Rot.at<double>(0,0) << " " << Rot.at<double>(0,1) << " " << Rot.at<double>(0,2) << " " << Tr.at<double>(0,0) << " "
-                               << Rot.at<double>(1,0) << " " << Rot.at<double>(1,1) << " " << Rot.at<double>(1,2) << " " << Tr.at<double>(1,0) << " "
-                               << Rot.at<double>(2,0) << " " << Rot.at<double>(2,1) << " " << Rot.at<double>(2,2) << " " << Tr.at<double>(2,0) << " "
-                               << 0.0                 << " " << 0.0                 << " " << 0.0                 << " " << 1.0                << ")";
-                    line = "HN" + string(ss.str());
-                }
-
-                if (!standalone) {
-                    if (line.find("QL", 0) != string::npos) {
-                        line = "QL (" + string(qL.toString().c_str()) + ")";
-                    }
-                    if (line.find("QR", 0) != string::npos) {
-                        line = "QR (" + string(qR.toString().c_str()) + ")";
-                    }
-                }
-            }
-            // buffer line
-            lines.push_back(line);
-        }
-
-        in.close();
-
-        // rewrite file
-        if (!sectionFound){
-            append = true;
-            cout << "Camera calibration parameter section " + string("[") + groupname + string("]") + " not found in file " << camCalibFile << ". Adding group..." << endl;
-        }
-        else{
-            // rewrite file
-            ofstream out;
-            out.open(camCalibFile.c_str(), ios::trunc);
-            if (out.is_open()){
-                for (int i = 0; i < (int)lines.size(); i++)
-                    out << lines[i] << endl;
-                out.close();
-            }
-            else
-                return false;
-        }
-
-    }
-    else{
-        append = true;
-    }
-
-    if (append){
-        // file doesn't exist or section is appended
-        ofstream out;
-        out.open(camCalibFile.c_str(), ios::app);
-        if (out.is_open()){
-            out << endl;
-            out << string("[") + groupname + string("]") << endl;
-            out << "HN (" << Rot.at<double>(0,0) << " " << Rot.at<double>(0,1) << " " << Rot.at<double>(0,2) << " " << Tr.at<double>(0,0) << " "
-                          << Rot.at<double>(1,0) << " " << Rot.at<double>(1,1) << " " << Rot.at<double>(1,2) << " " << Tr.at<double>(1,0) << " "
-                          << Rot.at<double>(2,0) << " " << Rot.at<double>(2,1) << " " << Rot.at<double>(2,2) << " " << Tr.at<double>(2,0) << " "
-                          << 0.0                 << " " << 0.0                 << " " << 0.0                 << " " << 1.0                << ")";
-            out << endl;
-            out << "QL (" << qL.toString().c_str() << ")" << endl;
-            out << "QR (" << qR.toString().c_str() << ")" << endl;
-            out.close();
-        }
-        else
-            return false;
-    }
-
-    return true;
 }

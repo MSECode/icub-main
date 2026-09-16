@@ -140,8 +140,6 @@ private:
 
     Size _expectedImageSize{};
 
-    ImageOf<PixelRgb> *imageL;
-    ImageOf<PixelRgb> *imageR;
     Mat LeftRgb;
     Mat RightRgb;
 
@@ -179,9 +177,6 @@ private:
     string outNameLeft;
     string camCalibFile;
     string currentPathDir;
-    std::vector<string> imageListR;
-    std::vector<string> imageListL;
-    std::vector<string> imageListLR;
 
     stereo_calib::ChessboardConfiguration _chessboardConfiguration;
     std::vector<stereo_calib::StereoObservation> _observations;

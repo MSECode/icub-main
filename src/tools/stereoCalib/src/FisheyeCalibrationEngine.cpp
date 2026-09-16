@@ -90,6 +90,9 @@ bool FisheyeCalibrationEngine::calibrate(
     errorMessage.clear();
 
     CalibrationResult calculated;
+    calculated.model = CameraModel::Fisheye;
+    calculated.leftCamera.model = CameraModel::Fisheye;
+    calculated.rightCamera.model = CameraModel::Fisheye;
     calculated.mode = options.calibrationMode;
 
     try
@@ -297,8 +300,9 @@ bool FisheyeCalibrationEngine::calibrateMonocular(
                                                 intrinsic, distortion, rotationVectors,
                                                 translationVectors, options.monocularFlags,
                                                 options.criteria);
-
+    
     result = CameraCalibrationResult{};
+    result.model = CameraModel::Fisheye;
     result.imageSize = options.imageSize;
     result.K = intrinsic.clone();
     result.D = distortion.reshape(1, 4).clone();
