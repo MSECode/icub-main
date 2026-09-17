@@ -125,25 +125,27 @@ namespace stereo_calib
                 timestampDeltaSeconds >=0.0);
         }
     };
+
+    struct CommonCalibrationOptions
+    {
+        CalibrationMode calibrationMode{CalibrationMode::StereoFull};
+        cv::Size imageSize{1920, 1080};
+    };
     
     struct PinholeCalibrationOptions
     {
-        CalibrationMode calibrationMode{CalibrationMode::StereoFull};
-
-        cv::Size imageSize{1920, 1080};
+        CommonCalibrationOptions common;
         double cameraFocalLengthGuess{625.0};
 
         int monocularFlags{
             // cv::CALIB_USE_INTRINSIC_GUESS | to be added later if performance is not good enough
             // cv::CALIB_FIX_PRINCIPAL_POINT |
-            cv::CALIB_FIX_K3 | 
-            cv::CALIB_FIX_K4 |
-            cv::CALIB_FIX_TANGENT_DIST
+            // cv::CALIB_FIX_TANGENT_DIST |
+            cv::CALIB_FIX_K3 
         };
 
         int stereoFlags{
             cv::CALIB_FIX_INTRINSIC |
-            cv::CALIB_FIX_PRINCIPAL_POINT |
             cv::CALIB_FIX_ASPECT_RATIO |
             cv::CALIB_FIX_K3
         };
@@ -157,8 +159,8 @@ namespace stereo_calib
 
         bool isValid() const
         {
-            return (imageSize.width > 0 &&
-                imageSize.height > 0 &&
+            return (common.imageSize.width > 0 &&
+                common.imageSize.height > 0 &&
                 (!(criteria.type & cv::TermCriteria::COUNT) || criteria.maxCount > 0) &&
                 (!(criteria.type & cv::TermCriteria::EPS) ||
                  (std::isfinite(criteria.epsilon) && criteria.epsilon > 0.0)));
@@ -167,9 +169,7 @@ namespace stereo_calib
     
     struct FisheyeCalibrationOptions
     {
-        CalibrationMode calibrationMode{CalibrationMode::StereoFull};
-
-        cv::Size imageSize{1920, 1080};
+        CommonCalibrationOptions common;
         double cameraFocalLengthGuess{625.0};
 
         int monocularFlags{
@@ -199,8 +199,8 @@ namespace stereo_calib
 
         bool isValid() const
         {
-            return (imageSize.width > 0 &&
-                imageSize.height > 0 &&
+            return (common.imageSize.width > 0 &&
+                common.imageSize.height > 0 &&
                 std::isfinite(rectificationBalance) &&
                 rectificationBalance >= 0.0 &&
                 rectificationBalance <= 1.0 &&
@@ -357,6 +357,7 @@ namespace stereo_calib
         {
             switch (mode)
             {
+                // TODO: change to check on camera model not calib mode
                 case CalibrationMode::MonocularLeft:
                     return leftCamera.isValid();
                 case CalibrationMode::MonocularRight:

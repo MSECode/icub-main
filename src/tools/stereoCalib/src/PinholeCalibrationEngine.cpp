@@ -23,7 +23,7 @@ namespace helpers
     {
         return result.imageSize.width > 0 && result.imageSize.height > 0 &&
             result.K.rows == 3 && result.K.cols == 3 && result.K.type() == CV_64F &&
-            result.D.total() == 4 && result.D.type() == CV_64F &&
+            result.D.total() == 5 && result.D.type() == CV_64F &&
             std::isfinite(result.rms) && result.rms >= 0.0 &&
             result.K.at<double>(0, 0) > 0.0 && result.K.at<double>(1, 1) > 0.0 &&
             isFinite(result.K) && isFinite(result.D) &&
@@ -73,7 +73,7 @@ namespace stereo_calib
         calculated.model = CameraModel::Pinhole;
         calculated.leftCamera.model = CameraModel::Pinhole;
         calculated.rightCamera.model = CameraModel::Pinhole;
-        calculated.mode = options.calibrationMode;
+        calculated.mode = options.common.calibrationMode;
 
         try
         {
@@ -83,15 +83,30 @@ namespace stereo_calib
                 return false;
             }
 
-            if(!validateObservations(observations, options.imageSize, errorMessage))
+            if(!validateObservations(observations, options.common.imageSize, errorMessage))
             {
                 return false;
             }
 
-            switch (options.calibrationMode)
+            switch (options.common.calibrationMode)
             {
             case CalibrationMode::MonocularLeft:
-                if(!calibrateMonocular(observations, CameraSide::Left, options, calculated.leftCamera, errorMessage))
+                if(!calibrateMonocular(observations, 
+                    CameraSide::Left, 
+                    options, 
+                    calculated.leftCamera, 
+                    errorMessage))
+                {
+                    return false;
+                }
+                break;
+            case CalibrationMode::MonocularRight:
+                if(!calibrateMonocular(
+                    observations, 
+                    CameraSide::Right, 
+                    options, 
+                    calculated.rightCamera, 
+                    errorMessage))
                 {
                     return false;
                 }
@@ -261,20 +276,20 @@ namespace stereo_calib
         {
             intrinsic.at<double>(0, 0) = options.cameraFocalLengthGuess;
             intrinsic.at<double>(1, 1) = options.cameraFocalLengthGuess;
-            intrinsic.at<double>(0, 2) = options.imageSize.width * 0.5;
-            intrinsic.at<double>(1, 2) = options.imageSize.height * 0.5;
+            intrinsic.at<double>(0, 2) = options.common.imageSize.width * 0.5;
+            intrinsic.at<double>(1, 2) = options.common.imageSize.height * 0.5;
         }
         cv::Mat distortion = cv::Mat::zeros(5, 1, CV_64F);
         std::vector<cv::Mat> rotationVectors;
         std::vector<cv::Mat> translationVectors;
 
-        const double rms = cv::fisheye::calibrate(objectPoints, imagePoints, options.imageSize,
+        const double rms = cv::calibrateCamera(objectPoints, imagePoints, options.common.imageSize,
                                                     intrinsic, distortion, rotationVectors,
                                                     translationVectors, options.monocularFlags,
                                                     options.criteria);
 
         result = CameraCalibrationResult{};
-        result.imageSize = options.imageSize;
+        result.imageSize = options.common.imageSize;
         result.K = intrinsic.clone();
         result.D = distortion.reshape(1, 5).clone();
         result.rotationVectors = std::move(rotationVectors);
@@ -292,7 +307,7 @@ namespace stereo_calib
         for (std::size_t index = 0; index < observations.size(); ++index)
         {
             std::vector<cv::Point2f> projectedPoints;
-            cv::fisheye::projectPoints(objectPoints[index], projectedPoints,
+            cv::projectPoints(objectPoints[index], projectedPoints,
                                     result.rotationVectors[index], result.translationVectors[index],
                                     result.K, result.D);
             if (projectedPoints.size() != imagePoints[index].size())
@@ -338,7 +353,7 @@ namespace stereo_calib
         const double rms = cv::stereoCalibrate(
             objectPoints, leftImagePoints, rightImagePoints,
             leftK, leftD, rightK, rightD,
-            options.imageSize, Rotation, Translation, Essential, Fundamental,
+            options.common.imageSize, Rotation, Translation, Essential, Fundamental,
             options.stereoFlags, options.criteria);
 
         result = StereoCalibrationResult{};

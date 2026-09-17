@@ -93,7 +93,7 @@ bool FisheyeCalibrationEngine::calibrate(
     calculated.model = CameraModel::Fisheye;
     calculated.leftCamera.model = CameraModel::Fisheye;
     calculated.rightCamera.model = CameraModel::Fisheye;
-    calculated.mode = options.calibrationMode;
+    calculated.mode = options.common.calibrationMode;
 
     try
     {
@@ -103,12 +103,12 @@ bool FisheyeCalibrationEngine::calibrate(
             return false;
         }
 
-        if (!validateObservations(observations, options.imageSize, errorMessage))
+        if (!validateObservations(observations, options.common.imageSize, errorMessage))
         {
             return false;
         }
 
-        switch (options.calibrationMode)
+        switch (options.common.calibrationMode)
         {
         case CalibrationMode::MonocularLeft:
             if (!calibrateMonocular(observations, CameraSide::Left, options,
@@ -290,20 +290,20 @@ bool FisheyeCalibrationEngine::calibrateMonocular(
     cv::Mat intrinsic = cv::Mat::eye(3, 3, CV_64F);
     intrinsic.at<double>(0, 0) = options.cameraFocalLengthGuess;
     intrinsic.at<double>(1, 1) = options.cameraFocalLengthGuess;
-    intrinsic.at<double>(0, 2) = options.imageSize.width * 0.5;
-    intrinsic.at<double>(1, 2) = options.imageSize.height * 0.5;
+    intrinsic.at<double>(0, 2) = options.common.imageSize.width * 0.5;
+    intrinsic.at<double>(1, 2) = options.common.imageSize.height * 0.5;
     cv::Mat distortion = cv::Mat::zeros(4, 1, CV_64F);
     std::vector<cv::Mat> rotationVectors;
     std::vector<cv::Mat> translationVectors;
 
-    const double rms = cv::fisheye::calibrate(objectPoints, imagePoints, options.imageSize,
+    const double rms = cv::fisheye::calibrate(objectPoints, imagePoints, options.common.imageSize,
                                                 intrinsic, distortion, rotationVectors,
                                                 translationVectors, options.monocularFlags,
                                                 options.criteria);
     
     result = CameraCalibrationResult{};
     result.model = CameraModel::Fisheye;
-    result.imageSize = options.imageSize;
+    result.imageSize = options.common.imageSize;
     result.K = intrinsic.clone();
     result.D = distortion.reshape(1, 4).clone();
     result.rotationVectors = std::move(rotationVectors);
@@ -365,7 +365,7 @@ bool FisheyeCalibrationEngine::calibrateStereo(
     cv::Mat rotation;
     cv::Mat translation;
     const double rms = cv::fisheye::stereoCalibrate(objectPoints, leftImagePoints, rightImagePoints,
-                                                      leftK, leftD, rightK, rightD, options.imageSize,
+                                                      leftK, leftD, rightK, rightD, options.common.imageSize,
                                                       rotation, translation, options.stereoFlags,
                                                       options.criteria);
 
@@ -391,12 +391,12 @@ bool FisheyeCalibrationEngine::computeRectification(
 {
     result = RectificationResult{};
     cv::fisheye::stereoRectify(leftCamera.K, leftCamera.D, rightCamera.K, rightCamera.D,
-                               options.imageSize, stereo.R, stereo.T, result.R1, result.R2,
+                               options.common.imageSize, stereo.R, stereo.T, result.R1, result.R2,
                                result.P1, result.P2, result.Q,
                                options.zeroDisparity ? cv::CALIB_ZERO_DISPARITY : 0,
-                               options.imageSize, options.rectificationBalance,
+                               options.common.imageSize, options.rectificationBalance,
                                options.rectificationFovScale);
-    result.outputImageSize = options.imageSize;
+    result.outputImageSize = options.common.imageSize;
     result.balance = options.rectificationBalance;
     result.fovScale = options.rectificationFovScale;
     result.zeroDisparity = options.zeroDisparity;

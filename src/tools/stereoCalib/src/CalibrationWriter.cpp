@@ -96,10 +96,26 @@ void writeCamera(std::ostream& output, const char* side, std::string projection,
     output << "fy " << matrixValue(camera.K, 4) << "\n";
     output << "cx " << matrixValue(camera.K, 2) << "\n";
     output << "cy " << matrixValue(camera.K, 5) << "\n";
-    output << "k1 " << matrixValue(camera.D, 0) << "\n";
-    output << "k2 " << matrixValue(camera.D, 1) << "\n";
-    output << "k3 " << matrixValue(camera.D, 2) << "\n";
-    output << "k4 " << matrixValue(camera.D, 3) << "\n\n";
+    if (projection == "fisheye")
+    {
+        output << "k1 " << matrixValue(camera.D, 0) << "\n";
+        output << "k2 " << matrixValue(camera.D, 1) << "\n";
+        output << "k3 " << matrixValue(camera.D, 2) << "\n";
+        output << "k4 " << matrixValue(camera.D, 3) << "\n\n";
+    }
+    else if (projection == "pinhole")
+    {
+        output << "k1 " << matrixValue(camera.D, 0) << "\n";
+        output << "k2 " << matrixValue(camera.D, 1) << "\n";
+        output << "p1 " << matrixValue(camera.D, 2) << "\n";
+        output << "p2 " << matrixValue(camera.D, 3) << "\n";
+        output << "k3 " << matrixValue(camera.D, 4) << "\n\n";
+    }
+    else
+    {
+        output << "# Unknown projection type '" << projection
+               << "'; distortion coefficients not written.\n\n";
+    }
 }
 
 std::string temporaryObservationFile(const std::string& filename)

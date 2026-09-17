@@ -23,6 +23,7 @@
 #include "CalibrationTypes.h"
 #include "CalibrationWriter.h"
 #include "FisheyeCalibrationEngine.h"
+#include "PinholeCalibrationEngine.h"
 
 using namespace std;
 using namespace cv;
@@ -157,8 +158,6 @@ private:
     
     Mat DistL;
     Mat DistR;
-    double vergence;
-    double version;
 
     bool standalone;
     yarp::dev::PolyDriver polyHead;
@@ -167,10 +166,6 @@ private:
     yarp::dev::PolyDriver polyTorso;
     yarp::dev::IEncoders *posTorso;
 
-    Mat R;
-    Mat T;
-    Mat Q;
-    Size lastImageSize;
     string inputLeftPortName;
     string inputRightPortName;
     string outNameRight;
@@ -182,10 +177,17 @@ private:
     std::vector<stereo_calib::StereoObservation> _observations;
     std::size_t _rejectedDetections{0};
 
-    stereo_calib::FisheyeCalibrationEngine _calibrationEngine;
-    stereo_calib::CalibrationWriter _calibrationWriter;
-    stereo_calib::FisheyeCalibrationOptions _calibrationOptions;
+    stereo_calib::CameraModel _cameraModel{stereo_calib::CameraModel::Pinhole};
+    stereo_calib::CalibrationMode _calibrationMode{stereo_calib::CalibrationMode::StereoFull};
+
+    stereo_calib::FisheyeCalibrationEngine _fisheyeCalibrationEngine;
+    stereo_calib::FisheyeCalibrationOptions _fisheyeCalibrationOptions;
+
+    stereo_calib::PinholeCalibrationEngine _pinholeCalibrationEngine;
+    stereo_calib::PinholeCalibrationOptions _pinholeCalibrationOptions;
+
     stereo_calib::CalibrationResult _calibrationResults;
+    stereo_calib::CalibrationWriter _calibrationWriter;
 
     std::string _calibrationError;
 
@@ -205,21 +207,7 @@ private:
     int boardHeight;
     float squareSize;
     string boardType;
-    char pathL[256];
-    char pathR[256];
-    void printMatrix(Mat &matrix);
-    bool checkTS(double TSLeft, double TSRight, double th=0.08);
-    void preparePath(const char * imageDir, char* pathL, char* pathR, int num);
-    void saveStereoImage(const char * imageDir, const Mat& left, const Mat& right, int num);
-    double monoCalibration(const vector<string>& imageList, int boardWidth, int boardHeight, Mat &K, Mat &Dist, const char* cameraName);
-    void stereoCalibration(const vector<string>& imagelist, int boardWidth, int boardHeight,float sqsizee);
-    void saveCalibration(const string& extrinsicFilePath, const string& intrinsicFilePath);
-    void calcChessboardCorners(Size boardSize, float squareSize, vector<Point3f>& corners);
-    bool updateIntrinsics( int width, int height, double fx, double fy,double cx, double cy, double k1, double k2, double p1, double p2, const string& groupname);
-    bool updateExtrinsics(Mat Rot, Mat Tr, const string& groupname);
-    void saveImage(const char * imageDir, const Mat& left, int num);
     void stereoCalibRun();
-    void monoCalibRun();
     bool shouldQueueFrameForCollection(const Stamp& timestamp) const;
     void processSynchronizedPair(SynchronizedPair& pair, Size boardSize);
 
