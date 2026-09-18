@@ -146,7 +146,6 @@ namespace stereo_calib
 
         int stereoFlags{
             cv::CALIB_FIX_INTRINSIC |
-            cv::CALIB_FIX_ASPECT_RATIO |
             cv::CALIB_FIX_K3
         };
 
@@ -192,20 +191,10 @@ namespace stereo_calib
             1e-5
         };
 
-        double rectificationBalance {0.0};
-        double rectificationFovScale{1.0};
-
-        bool zeroDisparity{true};
-
         bool isValid() const
         {
             return (common.imageSize.width > 0 &&
                 common.imageSize.height > 0 &&
-                std::isfinite(rectificationBalance) &&
-                rectificationBalance >= 0.0 &&
-                rectificationBalance <= 1.0 &&
-                std::isfinite(rectificationFovScale) &&
-                rectificationFovScale > 0.0 &&
                 (!(criteria.type & cv::TermCriteria::COUNT) || criteria.maxCount > 0) &&
                 (!(criteria.type & cv::TermCriteria::EPS) ||
                  (std::isfinite(criteria.epsilon) && criteria.epsilon > 0.0)));
@@ -228,33 +217,77 @@ namespace stereo_calib
         std::vector<cv::Mat> rotationVectors;
         std::vector<cv::Mat> translationVectors;
 
-        // Optional quality value calculated for each view
+        // Reprojection RMS for every accepted calibration observation.
         std::vector<double> perViewRms;
 
         double rms{-1.0};
-
-        std::size_t expectedDistortionCoefficientsCount() const
-        {
-            switch(model)
-            {
-                case CameraModel::Pinhole:
-                    return 5;
-                case CameraModel::Fisheye:
-                    return 4;
-            }
-            return 0;
-        }
         
         bool isValid() const
         {
-            return (imageSize.width > 0 &&
-                imageSize.height > 0 &&
-                K.rows == 3 &&
-                K.cols == 3 &&
-                D.total() == expectedDistortionCoefficientsCount() &&
-                rms >= 0.0 &&
-                cv::checkRange(K) &&
-                cv::checkRange(D));
+            std::size_t expectedDistortionCount = 0;
+            switch(model)
+            {
+                case CameraModel::Pinhole:
+                    expectedDistortionCount = 5;
+                    break;
+                case CameraModel::Fisheye:
+                    expectedDistortionCount = 4;
+                    break;
+                default:
+                    return false;
+                break;
+            }
+
+            if(imageSize.width <=0 || imageSize.height <= 0)
+                return false;
+            
+            if(K.empty() ||
+                K.rows != 3 ||
+                K.cols != 3 ||
+                K.type() != CV_64F ||
+                !cv::checkRange(K, true))
+                return false;
+            
+            if(D.empty() ||
+                D.total() != expectedDistortionCount ||
+                D.type() != CV_64F ||
+                !cv::checkRange(D, true))
+                return false;
+            
+            if(K.at<double>(0, 0) <= 0.0 ||
+                K.at<double>(1,1) <= 0.0)
+                return false;
+
+            if(!std::isfinite(rms) || rms < 0.0)
+                return false;
+            
+            if(rotationVectors.size() != translationVectors.size() ||
+                rotationVectors.size() != perViewRms.size())
+                return false;
+            
+            for (size_t i = 0; i < rotationVectors.size(); i++)
+            {
+                const cv::Mat& rotation = rotationVectors[i];
+                const cv::Mat& translation = translationVectors[i];
+
+                if(rotation.empty() ||
+                    rotation.total() != 3 ||
+                    rotation.type() != CV_64F ||
+                    !cv::checkRange(rotation, true))
+                    return false;
+
+                if(translation.empty() ||
+                    translation.total() != 3 ||
+                    translation.type() != CV_64F ||
+                    !cv::checkRange(translation, true))
+                    return false;
+
+                if(!std::isfinite(perViewRms[i]) ||
+                    perViewRms[i] < 0.0)
+                    return false;
+            }
+            
+            return true;
         }
     };
 
@@ -276,47 +309,28 @@ namespace stereo_calib
 
         bool isValid() const
         {
-            return (R.rows == 3 &&
-                R.cols == 3 &&
-                T.total() == 3 &&
-                rms >= 0.0);
-        }
-    };
+            if(R.empty() ||
+                R.rows != 3 || 
+                R.cols != 3 ||
+                R.type() != CV_64F ||
+                !cv::checkRange(R, true)
+                )
+                return false;
 
-    struct RectificationResult
-    {
-        cv::Size outputImageSize;
+            if(T.empty() ||
+                T.total() != 3 ||
+                T.type() != CV_64F ||
+                !cv::checkRange(T, true))
+                return false;
 
-        // Rectification rotations.
-        cv::Mat R1;
-        cv::Mat R2;
-
-        // Rectified projection matrices
-        cv::Mat P1;
-        cv::Mat P2;
-
-        // Disparity-to-depth mapping matrix
-        cv::Mat Q;
-
-        double balance{0.0};
-        double fovScale{1.0};
-
-        bool zeroDisparity{true};
-
-        bool isValid() const
-        {
-            return (outputImageSize.width > 0 &&
-                outputImageSize.height > 0 &&
-                R1.rows == 3 &&
-                R1.cols == 3 &&
-                R2.rows == 3 &&
-                R2.cols == 3 &&
-                P1.rows == 3 &&
-                P1.cols == 4 &&
-                P2.rows == 3 &&
-                P2.cols == 4 &&
-                Q.rows == 4 &&
-                Q.cols == 4);
+            if(!std::isfinite(rms) ||
+                rms < 0.0 )
+                return false;
+            
+            if(std::abs(cv::determinant(R) - 1.0) >= 1e-3 || cv::norm(T) <= 1e-9)
+                return false;
+            
+            return true;
         }
     };
 
@@ -332,12 +346,6 @@ namespace stereo_calib
         // Baseline expressed in the same unit as StereoCalibrationResult::T.
         // It is calculated by the calibration engine, not by persistence.
         double baseline{-1.0};
-
-        double meanVerticalRectificationErrorPx {-1.0};
-        double medianVerticalRectificationErrorPx {-1.0};
-        double rmsVerticalRectificationErrorPx {-1.0};
-        double p95VerticalRectificationErrorPx {-1.0};
-        double maxVerticalRectificationErrorPx {-1.0};
     };
 
     struct CalibrationResult
@@ -349,26 +357,31 @@ namespace stereo_calib
         CameraCalibrationResult rightCamera;
 
         StereoCalibrationResult stereo;
-        RectificationResult rectification;
 
         CalibrationQualityMetrics quality;
 
         bool isValid() const
         {
+            const auto validCamera = 
+                [this](const CameraCalibrationResult& camera)
+                {
+                    return camera.model == model &&
+                        camera.isValid();
+                };
+
             switch (mode)
             {
                 // TODO: change to check on camera model not calib mode
                 case CalibrationMode::MonocularLeft:
-                    return leftCamera.isValid();
+                    return validCamera(leftCamera);
                 case CalibrationMode::MonocularRight:
-                    return rightCamera.isValid();
+                    return validCamera(rightCamera);
                 case CalibrationMode::MonocularBoth:
-                    return (leftCamera.isValid() && rightCamera.isValid());
+                    return (validCamera(leftCamera) && validCamera(rightCamera));
                 case CalibrationMode::StereoFull:
-                    return (leftCamera.isValid() &&
-                        rightCamera.isValid() &&
-                        stereo.isValid() &&
-                        rectification.isValid());
+                    return (validCamera(leftCamera) &&
+                        validCamera(rightCamera) &&
+                        stereo.isValid());
             }
             return false;
         }

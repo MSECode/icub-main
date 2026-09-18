@@ -78,24 +78,15 @@ namespace
             yCInfo(STEREOCALIBRATIONTHREAD) << "HN =" << formatCalibrationMatrix(homogeneousTransform);
         }
     
-        if(result.rectification.isValid())
-        {
-            yCInfo(STEREOCALIBRATIONTHREAD) << "R1 =" << formatCalibrationMatrix(result.rectification.R1);
-            yCInfo(STEREOCALIBRATIONTHREAD) << "R2 =" << formatCalibrationMatrix(result.rectification.R2);
-            yCInfo(STEREOCALIBRATIONTHREAD) << "P1 =" << formatCalibrationMatrix(result.rectification.P1);
-            yCInfo(STEREOCALIBRATIONTHREAD) << "P2 =" << formatCalibrationMatrix(result.rectification.P2);
-            yCInfo(STEREOCALIBRATIONTHREAD) << "Q =" << formatCalibrationMatrix(result.rectification.Q);
-        }
-    
-        if(result.mode == stereo_calib::CalibrationMode::StereoFull && result.model == stereo_calib::CameraModel::Fisheye)
-        {
-            yCInfo(STEREOCALIBRATIONTHREAD) << "Rectification vertical error [mean median RMS p95 max] ="
-                    << result.quality.meanVerticalRectificationErrorPx
-                    << result.quality.medianVerticalRectificationErrorPx
-                    << result.quality.rmsVerticalRectificationErrorPx
-                    << result.quality.p95VerticalRectificationErrorPx
-                    << result.quality.maxVerticalRectificationErrorPx;
-        }
+        // if(result.mode == stereo_calib::CalibrationMode::StereoFull && result.model == stereo_calib::CameraModel::Fisheye)
+        // {
+        //     yCInfo(STEREOCALIBRATIONTHREAD) << "Rectification vertical error [mean median RMS p95 max] ="
+        //             << result.quality.meanVerticalRectificationErrorPx
+        //             << result.quality.medianVerticalRectificationErrorPx
+        //             << result.quality.rmsVerticalRectificationErrorPx
+        //             << result.quality.p95VerticalRectificationErrorPx
+        //             << result.quality.maxVerticalRectificationErrorPx;
+        // }
         yCInfo(STEREOCALIBRATIONTHREAD) << "======================================================================";
     }
     
@@ -495,7 +486,7 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
 
     if(foundL && foundR) 
     {
-        yCDebug(STEREOCALIBRATIONTHREAD) << "Found chessboard corners in both left and right images";
+        yCDebug(STEREOCALIBRATIONTHREAD) << "Found calibration board corners in both left and right images";
 
         const Rect leftBoardBounds = boundingRect(leftCorners);
         const Rect rightBoardBounds = boundingRect(rightCorners);
@@ -548,7 +539,7 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
         }
 
         std::size_t observationIndex = 0;
-        observationIndex = _observations.size(); //TODO: check this
+        observationIndex = _observations.size();
 
         // Raw images are saved before drawing any optional diagnostics and
         // only after the pair has become an accepted observation candidate.
@@ -564,10 +555,15 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
                 yCError(STEREOCALIBRATIONTHREAD) << "Could not save accepted calibration image pair:" << imageError;
                 {
                     std::lock_guard<std::mutex> lock(mtx);
+                    if (calibrationState.load() != CalibrationState::Collecting)
+                    {
+                        return;
+                    }
+                    
                     _calibrationError = imageError;
                     _calibrationResults = stereo_calib::CalibrationResult{};
+                    calibrationState.store(CalibrationState::Error);
                 }
-                calibrationState.store(CalibrationState::Error);
                 return;
             }
         }
@@ -678,15 +674,6 @@ StereoCalibStatus stereoCalibThread::getStatus() const
             result.stereoRms = _calibrationResults.stereo.rms;
             result.baselineNorm = _calibrationResults.quality.baseline;
         }
-        if(_calibrationResults.mode == stereo_calib::CalibrationMode::StereoFull)
-        {
-            result.medianVerticalRectificationErrorPx =
-                _calibrationResults.quality.medianVerticalRectificationErrorPx;
-            result.p95VerticalRectificationErrorPx =
-                _calibrationResults.quality.p95VerticalRectificationErrorPx;
-            result.maxVerticalRectificationErrorPx =
-                _calibrationResults.quality.maxVerticalRectificationErrorPx;
-        }
     }
 
     return result;
@@ -720,6 +707,7 @@ void stereoCalibThread::stereoCalibRun()
         {
             synchronizer.reset();
             lastProcessedCandidateTime = -1.0;
+            _expectedImageSize = {};
             _observations.clear();
             _rejectedDetections = 0;
             {
@@ -850,12 +838,12 @@ void stereoCalibThread::stereoCalibRun()
                 // The engine converts OpenCV exceptions into a diagnostic.  Log
                 // it here, where YARP logging is allowed, and stop calibration
                 // processing while keeping the Error state and status available.
-                yCError(STEREOCALIBRATIONTHREAD) << "Fisheye calibration failed:" << calibrationError;
+                yCError(STEREOCALIBRATIONTHREAD) << "Calibration failed:" << calibrationError;
                 {
                     std::lock_guard<std::mutex> lock(mtx);
                     _calibrationResults = stereo_calib::CalibrationResult{};
                     _calibrationError = calibrationError.empty()
-                        ? "Fisheye calibration failed without an error message."
+                        ? "Calibration failed without an error message."
                         : calibrationError;
                 }
                 calibrationState.store(CalibrationState::Error);
@@ -864,6 +852,8 @@ void stereoCalibThread::stereoCalibRun()
 
             calibrationResult.quality.rejectedDetections = _rejectedDetections;
             calibrationResult.quality.synchronizedPairs = synchronizer.getStatistics().pairedFrames;
+            calibrationResult.quality.acceptedObservations = observationSnapshot.size();
+            calibrationResult.quality.baseline = cv::norm(calibrationResult.stereo.T);
 
             std::string persistenceError;
             if(!_calibrationWriter.write(camCalibFile, calibrationResult, persistenceError))

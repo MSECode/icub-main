@@ -1,13 +1,9 @@
 #include "PinholeCalibrationEngine.h"
 
-namespace helpers
+namespace
 {
     constexpr std::size_t minimumObservations = 30;
     constexpr std::size_t minimumPointsPerObservation = 12;
-    bool isFinite(const cv::Mat& matrix)
-    {
-        return !matrix.empty() && cv::checkRange(matrix, true, nullptr);
-    }
 
     bool isFinite(const cv::Point2f& point)
     {
@@ -18,45 +14,7 @@ namespace helpers
     {
         return std::isfinite(point.x) && std::isfinite(point.y) && std::isfinite(point.z);
     }
-
-    bool isValidCameraResult(const stereo_calib::CameraCalibrationResult& result)
-    {
-        return result.imageSize.width > 0 && result.imageSize.height > 0 &&
-            result.K.rows == 3 && result.K.cols == 3 && result.K.type() == CV_64F &&
-            result.D.total() == 5 && result.D.type() == CV_64F &&
-            std::isfinite(result.rms) && result.rms >= 0.0 &&
-            result.K.at<double>(0, 0) > 0.0 && result.K.at<double>(1, 1) > 0.0 &&
-            isFinite(result.K) && isFinite(result.D) &&
-            result.rotationVectors.size() == result.translationVectors.size() &&
-            result.rotationVectors.size() == result.perViewRms.size() &&
-            std::all_of(result.perViewRms.begin(), result.perViewRms.end(),
-                        [](double value) { return std::isfinite(value) && value >= 0.0; });
-    }
-
-    bool isValidStereoResult(const stereo_calib::StereoCalibrationResult& result)
-    {
-        if (result.R.rows != 3 || result.R.cols != 3 || result.R.type() != CV_64F ||
-            result.T.total() != 3 || result.T.type() != CV_64F ||
-            !std::isfinite(result.rms) || result.rms < 0.0 ||
-            !isFinite(result.R) || !isFinite(result.T))
-        {
-            return false;
-        }
-
-        return std::abs(cv::determinant(result.R) - 1.0) < 1e-3 && cv::norm(result.T) > 1e-9;
-    }
-} // namespace helpers
-
-bool isValidQuality(const stereo_calib::CalibrationQualityMetrics& quality)
-{
-    return quality.acceptedObservations > 0 &&
-           std::isfinite(quality.baseline) && quality.baseline > 0.0 &&
-           std::isfinite(quality.meanVerticalRectificationErrorPx) && quality.meanVerticalRectificationErrorPx >= 0.0 &&
-           std::isfinite(quality.medianVerticalRectificationErrorPx) && quality.medianVerticalRectificationErrorPx >= 0.0 &&
-           std::isfinite(quality.rmsVerticalRectificationErrorPx) && quality.rmsVerticalRectificationErrorPx >= 0.0 &&
-           std::isfinite(quality.p95VerticalRectificationErrorPx) && quality.p95VerticalRectificationErrorPx >= 0.0 &&
-           std::isfinite(quality.maxVerticalRectificationErrorPx) && quality.maxVerticalRectificationErrorPx >= 0.0;
-}
+} // namespace
 
 namespace stereo_calib
 {
@@ -138,8 +96,7 @@ namespace stereo_calib
                 break;
             }
 
-            if (!calculated.isValid() ||
-                (calculated.mode == CalibrationMode::StereoFull && !isValidQuality(calculated.quality)))
+            if (!calculated.isValid())
             {
                 errorMessage = "Calibration produced an invalid result.";
                 return false;
@@ -170,9 +127,9 @@ namespace stereo_calib
         const cv::Size& expectedImageSize, 
         std::string& errorMessage) const
     {
-        if (observations.size() < helpers::minimumObservations)
+        if (observations.size() < minimumObservations)
         {
-            errorMessage = "At least " + std::to_string(helpers::minimumObservations) +
+            errorMessage = "At least " + std::to_string(minimumObservations) +
                         " stereo observations are required.";
             return false;
         }
@@ -200,10 +157,10 @@ namespace stereo_calib
                 return false;
             }
 
-            if (observation.objectPoints.size() < helpers::minimumPointsPerObservation)
+            if (observation.objectPoints.size() < minimumPointsPerObservation)
             {
                 errorMessage = prefix + "contains fewer than " +
-                            std::to_string(helpers::minimumPointsPerObservation) + " calibration points.";
+                            std::to_string(minimumPointsPerObservation) + " calibration points.";
                 return false;
             }
 
@@ -217,9 +174,9 @@ namespace stereo_calib
 
             for (std::size_t pointIndex = 0; pointIndex < observation.objectPoints.size(); ++pointIndex)
             {
-                if (!helpers::isFinite(observation.objectPoints[pointIndex]) ||
-                    !helpers::isFinite(observation.leftImagePoints[pointIndex]) ||
-                    !helpers::isFinite(observation.rightImagePoints[pointIndex]))
+                if (!isFinite(observation.objectPoints[pointIndex]) ||
+                    !isFinite(observation.leftImagePoints[pointIndex]) ||
+                    !isFinite(observation.rightImagePoints[pointIndex]))
                 {
                     errorMessage = prefix + "point #" + std::to_string(pointIndex + 1) +
                                 " contains a non-finite coordinate.";
@@ -289,6 +246,7 @@ namespace stereo_calib
                                                     options.criteria);
 
         result = CameraCalibrationResult{};
+        result.model = CameraModel::Pinhole;
         result.imageSize = options.common.imageSize;
         result.K = intrinsic.clone();
         result.D = distortion.reshape(1, 5).clone();
@@ -320,7 +278,7 @@ namespace stereo_calib
             result.perViewRms.push_back(viewRms);
         }
 
-        if (!helpers::isValidCameraResult(result))
+        if (!result.isValid())
         {
             errorMessage = "Monocular calibration produced invalid camera parameters.";
             return false;
@@ -361,7 +319,7 @@ namespace stereo_calib
         result.T = Translation.reshape(1, 3).clone();
         result.rms = rms;
 
-        if (!helpers::isValidStereoResult(result))
+        if (!result.isValid())
         {
             errorMessage = "Stereo calibration produced an invalid result.";
             return false;
