@@ -82,9 +82,6 @@ struct StereoCalibStatus
     double rightMonocularRms{-1.0};
     double stereoRms{-1.0};
     double baselineNorm{-1.0};
-    double medianVerticalRectificationErrorPx{-1.0};
-    double p95VerticalRectificationErrorPx{-1.0};
-    double maxVerticalRectificationErrorPx{-1.0};
     std::string lastCalibrationError;
 };
 
@@ -153,17 +150,12 @@ private:
 
     int numOfPairs;
     bool stereo;
-    Mat Kleft;
-    Mat Kright;
-    
-    Mat DistL;
-    Mat DistR;
 
     bool standalone;
-    yarp::dev::PolyDriver polyHead;
+    yarp::dev::PolyDriver polyHead{nullptr};
     yarp::dev::IEncoders *posHead;
 
-    yarp::dev::PolyDriver polyTorso;
+    yarp::dev::PolyDriver polyTorso{nullptr};
     yarp::dev::IEncoders *posTorso;
 
     string inputLeftPortName;
@@ -171,7 +163,6 @@ private:
     string outNameRight;
     string outNameLeft;
     string camCalibFile;
-    string currentPathDir;
 
     stereo_calib::ChessboardConfiguration _chessboardConfiguration;
     std::vector<stereo_calib::StereoObservation> _observations;

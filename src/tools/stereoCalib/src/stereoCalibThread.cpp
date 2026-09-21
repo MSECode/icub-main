@@ -1,11 +1,8 @@
 #include <algorithm>
 #include <cmath>
 #include <utility>
-#include <chrono>
-#include <thread>
 #include <sstream>
 #include <yarp/cv/Cv.h>
-#include <yarp/os/LogStream.h>
 #include <yarp/os/LogStream.h>
 #include "stereoCalibThread.h"
 
@@ -52,7 +49,7 @@ namespace
  
     void logCalibrationResult(const stereo_calib::CalibrationResult& result)
     {
-        yCInfo(STEREOCALIBRATIONTHREAD) << "========== Fisheye calibration result (not written to disk) ==========";
+        yCInfo(STEREOCALIBRATIONTHREAD) << "========== Calibration result (not written to disk) ==========";
     
         if(result.leftCamera.isValid())
         {
@@ -77,16 +74,6 @@ namespace
             // HN is the same homogeneous transform layout used by outputCalib.ini.
             yCInfo(STEREOCALIBRATIONTHREAD) << "HN =" << formatCalibrationMatrix(homogeneousTransform);
         }
-    
-        // if(result.mode == stereo_calib::CalibrationMode::StereoFull && result.model == stereo_calib::CameraModel::Fisheye)
-        // {
-        //     yCInfo(STEREOCALIBRATIONTHREAD) << "Rectification vertical error [mean median RMS p95 max] ="
-        //             << result.quality.meanVerticalRectificationErrorPx
-        //             << result.quality.medianVerticalRectificationErrorPx
-        //             << result.quality.rmsVerticalRectificationErrorPx
-        //             << result.quality.p95VerticalRectificationErrorPx
-        //             << result.quality.maxVerticalRectificationErrorPx;
-        // }
         yCInfo(STEREOCALIBRATIONTHREAD) << "======================================================================";
     }
     
@@ -103,8 +90,8 @@ namespace
         else
         {
             yCError(STEREOCALIBRATIONTHREAD) << "Invalid camera model string:" << modelString
-                    << ". Using default Pinhole.";
-            return stereo_calib::CameraModel::Pinhole;
+                    << ". Setting to Invalid.";
+            return stereo_calib::CameraModel::Invalid;
         }
     }
 
@@ -296,7 +283,6 @@ stereoCalibThread::stereoCalibThread(ResourceFinder &rf, Port* commPort, const c
     this->imageDir=imageDir;
     this->collectionResetRequested.store(false);
     this->calibrationState.store(CalibrationState::Idle);
-    this->currentPathDir=rf.getHomeContextPath().c_str();
     // All new calibration modes use the synchronized-observation pipeline.
     // In particular, completion must never bypass CalibrationWriter.
     this->stereo = true;
@@ -356,15 +342,18 @@ bool stereoCalibThread::threadInit()
     //mono calibration does not need the joint positions initialised below
     if(!stereo || standalone) return true;
 
+    //TODO: develop what to do with the control boards for head and torso
+    // in the legacy implementation the kinematic chain was calculated and joint position added to the output file
+    // now why we need that? is it uselful? do we need to change it to a check on steadiness for the calibration procedure
     Property optHead;
     optHead.put("device","remote_controlboard");
     optHead.put("remote",("/"+robotName+"/head").c_str());
     optHead.put("local","/"+moduleName+"/client/head");
-    if (polyHead.open(optHead))
-        polyHead.view(posHead);
-    else
+    if (!polyHead.open(optHead) ||
+        !polyHead.view(posHead) ||
+        posHead == nullptr)
     {
-        cout<<"Devices not available"<<endl;
+        yCError(STEREOCALIBRATIONTHREAD) << "Unable to acquire the head encoder interface";
         return false;
     }
 
@@ -374,9 +363,9 @@ bool stereoCalibThread::threadInit()
     optTorso.put("local","/"+moduleName+"/client/torso");
 
     bool useTorso=true;
-    if (polyTorso.open(optTorso))
-        polyTorso.view(posTorso);
-    else
+    if (!polyTorso.open(optTorso) ||
+        !polyTorso.view(posTorso) ||
+        posTorso == nullptr)
     {
         yCWarning(STEREOCALIBRATIONTHREAD, "Unable to connect to torso! Continuing without...");
         useTorso=false;
@@ -470,15 +459,19 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
     std::vector<Point2f> leftCorners;
     std::vector<Point2f> rightCorners;
 
+    //TODO: for now we are only using CHESSBOARD GRID. For circle grid and so on we will add an update in the future.
     if(boardType == "CIRCLES_GRID") {
         foundL = findCirclesGrid(LeftRgb, boardSize, leftCorners, CALIB_CB_SYMMETRIC_GRID  | CALIB_CB_CLUSTERING);
         foundR = findCirclesGrid(RightRgb, boardSize, rightCorners, CALIB_CB_SYMMETRIC_GRID  | CALIB_CB_CLUSTERING);
+        yCWarning(STEREOCALIBRATIONTHREAD) << "Board type:" << boardType << "not yet implemented.";
     } else if(boardType == "ASYMMETRIC_CIRCLES_GRID") {
         foundL = findCirclesGrid(LeftRgb, boardSize, leftCorners, CALIB_CB_ASYMMETRIC_GRID | CALIB_CB_CLUSTERING);
         foundR = findCirclesGrid(RightRgb, boardSize, rightCorners, CALIB_CB_ASYMMETRIC_GRID | CALIB_CB_CLUSTERING);
+        yCWarning(STEREOCALIBRATIONTHREAD) << "Board type:" << boardType << "not yet implemented.";
     } else if(boardType == "CHESSBOARD_SECTOR_BASED") {
         foundL = findChessboardCornersSB(leftGray, boardSize, leftCorners);
         foundR = findChessboardCornersSB(rightGray, boardSize, rightCorners);
+        yCWarning(STEREOCALIBRATIONTHREAD) << "Board type:" << boardType << "not yet implemented.";
     } else {
         foundL = findChessboardCorners(leftGray, boardSize, leftCorners, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_FILTER_QUADS);
         foundR = findChessboardCorners(rightGray, boardSize, rightCorners, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_FILTER_QUADS);
@@ -569,13 +562,15 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
         }
 
         // Detection and validation have completed.
-        if (calibrationState.load() != CalibrationState::Collecting)
         {
-            return;
+            std::lock_guard<std::mutex> lock(mtx);
+            if (calibrationState.load() != CalibrationState::Collecting)
+            {
+                return;
+            }
+            _observations.push_back(std::move(observation));
         }
-        
-        _observations.push_back(std::move(observation));
-        
+
         // Diagnostic overlays are deliberately the final step: they never
         // affect the persisted raw dataset or the stored corner coordinates.
         if(_drawDiagnosticCorners)
@@ -687,10 +682,9 @@ bool stereoCalibThread::shouldQueueFrameForCollection(const Stamp& timestamp) co
 
 void stereoCalibThread::stereoCalibRun()
 {
-    Size boardSize, imageSize;
+    Size boardSize;
     boardSize.width=this->boardWidth;
     boardSize.height=this->boardHeight;
-    int count=1;
 
     while (!isStopping()) 
     {
@@ -850,9 +844,15 @@ void stereoCalibThread::stereoCalibRun()
                 continue;
             }
 
+            const auto syncStats = synchronizer.getStatistics();
             calibrationResult.quality.rejectedDetections = _rejectedDetections;
-            calibrationResult.quality.synchronizedPairs = synchronizer.getStatistics().pairedFrames;
             calibrationResult.quality.acceptedObservations = observationSnapshot.size();
+            calibrationResult.quality.synchronizedPairs = syncStats.pairedFrames;
+            if(syncStats.pairedFrames > 0)
+            {
+                calibrationResult.quality.meanTimestampDeltaMs = 1000.0 * syncStats.accumulatedTimeStampDelta / static_cast<double>(syncStats.pairedFrames);
+            }
+            calibrationResult.quality.maxTimestampDeltaMs = syncStats.maxTimeStampDelta;
             calibrationResult.quality.baseline = cv::norm(calibrationResult.stereo.T);
 
             std::string persistenceError;
@@ -938,8 +938,8 @@ void stereoCalibThread::startCalib() {
 
     _calibrationResults = stereo_calib::CalibrationResult{};
     _calibrationError.clear();
-    collectionResetRequested.store(true);
     calibrationState.store(CalibrationState::Collecting);
+    collectionResetRequested.store(true);
 
     yCInfo(STEREOCALIBRATIONTHREAD) << "Calibration collection started";
 }

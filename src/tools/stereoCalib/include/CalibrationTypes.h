@@ -21,16 +21,18 @@ namespace stereo_calib
 
     enum class CalibrationMode
     {
-        MonocularLeft,  // validate obs -> calibrate left -> populate result.leftCamera -> no call to stereo calib nor rectification
-        MonocularRight, // validate obs -> calibrate right -> populate result.rightCamera -> no call to stereo calib nor rectification
-        MonocularBoth,  // validate obs -> calibrate left and right -> estimate intrinsics -> no estimation of R and T or rectification
-        StereoFull      // validate obs -> calibrate left and right -> stereo calib with fixed intrinsics -> stereo rectification -> evaluate rectification quality -> populate result with all fields
+        MonocularLeft,  // validate obs -> calibrate left -> populate result.leftCamera -> no call to stereo calib
+        MonocularRight, // validate obs -> calibrate right -> populate result.rightCamera -> no call to stereo calib
+        MonocularBoth,  // validate obs -> calibrate left and right -> estimate intrinsics -> no estimation of R and T
+        StereoFull,      // validate obs -> calibrate left and right -> stereo calib with fixed intrinsics -> evaluate stereo quality -> populate result with all fields
+        Invalid = 255
     };
 
     enum class CameraModel
     {
         Pinhole,
-        Fisheye
+        Fisheye,
+        Invalid = 255
     };
 
     struct ChessboardConfiguration
@@ -302,9 +304,6 @@ namespace stereo_calib
         cv::Mat R;
         cv::Mat T;
 
-        // Optional quality value calculated for each stereo observation
-        std::vector<double> perPairRms;
-
         double rms{-1.0};
 
         bool isValid() const
@@ -327,7 +326,10 @@ namespace stereo_calib
                 rms < 0.0 )
                 return false;
             
-            if(std::abs(cv::determinant(R) - 1.0) >= 1e-3 || cv::norm(T) <= 1e-9)
+            const cv::Mat identity = cv::Mat::eye(3,3,CV_64F);
+            if(std::abs(cv::determinant(R) - 1.0) >= 1e-3 ||
+                cv::norm(R.t() * R - identity, cv::NORM_INF) >= 1e-3 ||
+                cv::norm(T) <= 1e-9)
                 return false;
             
             return true;
@@ -371,7 +373,6 @@ namespace stereo_calib
 
             switch (mode)
             {
-                // TODO: change to check on camera model not calib mode
                 case CalibrationMode::MonocularLeft:
                     return validCamera(leftCamera);
                 case CalibrationMode::MonocularRight:
