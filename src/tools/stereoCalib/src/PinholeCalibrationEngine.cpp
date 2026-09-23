@@ -236,6 +236,9 @@ namespace stereo_calib
             intrinsic.at<double>(0, 2) = options.common.imageSize.width * 0.5;
             intrinsic.at<double>(1, 2) = options.common.imageSize.height * 0.5;
         }
+        // OpenCV's standard pinhole calibration vector contains k3 as its
+        // fifth entry. Keep it fixed to zero during optimization, then expose
+        // only the four coefficients consumed by camCalib.
         cv::Mat distortion = cv::Mat::zeros(5, 1, CV_64F);
         std::vector<cv::Mat> rotationVectors;
         std::vector<cv::Mat> translationVectors;
@@ -249,7 +252,7 @@ namespace stereo_calib
         result.model = CameraModel::Pinhole;
         result.imageSize = options.common.imageSize;
         result.K = intrinsic.clone();
-        result.D = distortion.reshape(1, 5).clone();
+        result.D = distortion.reshape(1, 5).rowRange(0, 4).clone();
         result.rotationVectors = std::move(rotationVectors);
         result.translationVectors = std::move(translationVectors);
         result.rms = rms;

@@ -143,6 +143,8 @@ namespace stereo_calib
             // cv::CALIB_USE_INTRINSIC_GUESS | to be added later if performance is not good enough
             // cv::CALIB_FIX_PRINCIPAL_POINT |
             // cv::CALIB_FIX_TANGENT_DIST |
+            // camCalib uses the legacy four-coefficient pinhole model, so the
+            // OpenCV-only fifth coefficient must remain fixed at zero.
             cv::CALIB_FIX_K3 
         };
 
@@ -212,7 +214,7 @@ namespace stereo_calib
         // 3x3 intrinsic camera matrix
         cv::Mat K;
 
-        // Pinhole distortion coefficients: [k1, k2 , p1, p2, k3]
+        // Pinhole distortion coefficients: [k1, k2, p1, p2]
         // Fisheye distortion coefficients: [k1, k2, k3, k4]
         cv::Mat D;
 
@@ -227,19 +229,9 @@ namespace stereo_calib
         
         bool isValid() const
         {
-            std::size_t expectedDistortionCount = 0;
-            switch(model)
-            {
-                case CameraModel::Pinhole:
-                    expectedDistortionCount = 5;
-                    break;
-                case CameraModel::Fisheye:
-                    expectedDistortionCount = 4;
-                    break;
-                default:
-                    return false;
-                break;
-            }
+            if(model != CameraModel::Pinhole &&
+                model != CameraModel::Fisheye)
+                return false;
 
             if(imageSize.width <=0 || imageSize.height <= 0)
                 return false;
@@ -252,7 +244,7 @@ namespace stereo_calib
                 return false;
             
             if(D.empty() ||
-                D.total() != expectedDistortionCount ||
+                D.total() != 4 ||
                 D.type() != CV_64F ||
                 !cv::checkRange(D, true))
                 return false;

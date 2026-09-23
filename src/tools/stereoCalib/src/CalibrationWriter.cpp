@@ -67,8 +67,7 @@ void writeCamera(std::ostream& output, const char* side, std::string projection,
         output << "k1 " << matrixValue(camera.D, 0) << "\n";
         output << "k2 " << matrixValue(camera.D, 1) << "\n";
         output << "p1 " << matrixValue(camera.D, 2) << "\n";
-        output << "p2 " << matrixValue(camera.D, 3) << "\n";
-        output << "k3 " << matrixValue(camera.D, 4) << "\n\n";
+        output << "p2 " << matrixValue(camera.D, 3) << "\n\n";
     }
     else
     {

@@ -40,8 +40,7 @@ namespace
             yCInfo(STEREOCALIBRATIONTHREAD) << "k1" << camera.D.at<double>(0, 0)
                     << "k2" << camera.D.at<double>(1, 0)
                     << "p1" << camera.D.at<double>(2, 0)
-                    << "p2" << camera.D.at<double>(3, 0)
-                    << "k3" << camera.D.at<double>(4, 0);
+                    << "p2" << camera.D.at<double>(3, 0);
         }
         yCInfo(STEREOCALIBRATIONTHREAD) << "K =" << formatCalibrationMatrix(camera.K);
         yCInfo(STEREOCALIBRATIONTHREAD) << "monocular RMS =" << camera.rms;
