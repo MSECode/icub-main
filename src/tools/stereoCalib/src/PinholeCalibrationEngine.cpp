@@ -265,9 +265,11 @@ namespace stereo_calib
         for (std::size_t index = 0; index < observations.size(); ++index)
         {
             std::vector<cv::Point2f> projectedPoints;
-            cv::projectPoints(objectPoints[index], projectedPoints,
-                                    result.rotationVectors[index], result.translationVectors[index],
-                                    result.K, result.D);
+            cv::projectPoints(objectPoints[index],
+                                result.rotationVectors[index], 
+                                result.translationVectors[index],
+                                result.K, result.D,
+                                projectedPoints);
             if (projectedPoints.size() != imagePoints[index].size())
             {
                 errorMessage = "OpenCV returned an incomplete projected point set.";

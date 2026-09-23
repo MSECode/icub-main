@@ -79,11 +79,11 @@ namespace
     
     stereo_calib::CameraModel parseCameraModel(const std::string& modelString)
     {
-        if(modelString == "Pinhole")
+        if(modelString == "pinhole")
         {
             return stereo_calib::CameraModel::Pinhole;
         }
-        else if(modelString == "Fisheye")
+        else if(modelString == "fisheye")
         {
             return stereo_calib::CameraModel::Fisheye;
         }
@@ -285,9 +285,8 @@ stereoCalibThread::stereoCalibThread(ResourceFinder &rf, Port* commPort, const c
     this->calibrationState.store(CalibrationState::Idle);
     // All new calibration modes use the synchronized-observation pipeline.
     // In particular, completion must never bypass CalibrationWriter.
-    this->stereo = true;
     this->camCalibFile=rf.getHomeContextPath().c_str();
-    this->standalone = rf.check("standalone");
+    this->standalone = rf.check("standalone", Value(false)).asBool();
     string fileName= "outputCalib.ini";
 
     this->camCalibFile=this->camCalibFile+"/"+fileName.c_str();
@@ -308,7 +307,7 @@ stereoCalibThread::stereoCalibThread(ResourceFinder &rf, Port* commPort, const c
 
     _saveImages = stereoCalibOpts.check("saveImages", Value(1)).asInt32() != 0;
     _drawDiagnosticCorners = stereoCalibOpts.check("drawDiagnosticCorners", Value(1)).asInt32() != 0;
-    _cameraModel = parseCameraModel(stereoCalibOpts.check("cameraModel", Value("Pinhole")).asString());
+    _cameraModel = parseCameraModel(stereoCalibOpts.check("cameraModel", Value("pinhole")).asString());
     _calibrationMode = parseCalibrationMode(stereoCalibOpts.check("calibrationMode", Value("StereoFull")).asString());
 
     if(!_chessboardConfiguration.isValid())
@@ -339,8 +338,8 @@ bool stereoCalibThread::threadInit()
       return false;
    }
 
-    //mono calibration does not need the joint positions initialised below
-    if(!stereo || standalone) return true;
+    //when in standalone mode we won't open the remote control board devices
+    if(standalone) return true;
 
     //TODO: develop what to do with the control boards for head and torso
     // in the legacy implementation the kinematic chain was calculated and joint position added to the output file

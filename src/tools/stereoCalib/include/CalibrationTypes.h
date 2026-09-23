@@ -147,6 +147,7 @@ namespace stereo_calib
         };
 
         int stereoFlags{
+            cv::CALIB_FIX_ASPECT_RATIO |
             cv::CALIB_FIX_INTRINSIC |
             cv::CALIB_FIX_K3
         };

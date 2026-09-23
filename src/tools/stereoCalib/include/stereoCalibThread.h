@@ -149,13 +149,12 @@ private:
     mutable std::mutex mtx;
 
     int numOfPairs;
-    bool stereo;
 
     bool standalone;
-    yarp::dev::PolyDriver polyHead{nullptr};
+    yarp::dev::PolyDriver polyHead;
     yarp::dev::IEncoders *posHead;
 
-    yarp::dev::PolyDriver polyTorso{nullptr};
+    yarp::dev::PolyDriver polyTorso;
     yarp::dev::IEncoders *posTorso;
 
     string inputLeftPortName;
