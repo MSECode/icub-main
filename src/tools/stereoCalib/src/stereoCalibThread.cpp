@@ -11,6 +11,30 @@ YARP_LOG_COMPONENT(STEREOCALIBRATIONTHREAD, "yarp.tools.stereoCalibThread")
 
 namespace
 {
+
+    // Temporary intrinsic initialization for the current camera setup:
+    // ED-LENS-M12-180250-08 (2.5 mm EFL) on an IMX678 sensor. The sensor's
+    // recommended 3840x2160 active area has 2.0 um square pixels. Since the
+    // camera pipeline only resizes the complete image, the physical active
+    // sensor dimensions remain the correct basis for every stream size.
+    constexpr double fisheyeLensFocalLengthMillimeters = 2.5;
+    constexpr double imx678PixelPitchMillimeters = 0.002;
+    constexpr double imx678ActiveWidthPixels = 3840.0;
+    constexpr double imx678ActiveHeightPixels = 2160.0;
+
+    double fisheyeFocalLengthGuessX(int imageWidth)
+    {
+        const double sensorWidthMillimeters =
+            imx678ActiveWidthPixels * imx678PixelPitchMillimeters;
+        return fisheyeLensFocalLengthMillimeters * imageWidth / sensorWidthMillimeters;
+    }
+
+    double fisheyeFocalLengthGuessY(int imageHeight)
+    {
+        const double sensorHeightMillimeters =
+            imx678ActiveHeightPixels * imx678PixelPitchMillimeters;
+        return fisheyeLensFocalLengthMillimeters * imageHeight / sensorHeightMillimeters;
+    }
  
     std::string formatCalibrationMatrix(const cv::Mat& matrix)
     {
@@ -413,7 +437,7 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
     }
     if(previousProcessedCandidateTime >= 0.0)
     {
-        yCDebug(STEREOCALIBRATIONTHREAD) << "Timestamp delta between processed pairs:" << (pairTime - previousProcessedCandidateTime) << "seconds";
+        yCInfo(STEREOCALIBRATIONTHREAD) << "Timestamp delta between processed pairs:" << (pairTime - previousProcessedCandidateTime) << "seconds";
     }
     lastProcessedCandidateTime = pairTime;
 
@@ -810,7 +834,19 @@ void stereoCalibThread::stereoCalibRun()
                 stereo_calib::FisheyeCalibrationOptions options = _fisheyeCalibrationOptions;
                 options.common.calibrationMode = _calibrationMode;
                 options.common.imageSize = observationSnapshot.front().imageSize;
-                options.cameraFocalLengthGuess = 625.0;
+                if (options.monocularFlags & cv::fisheye::CALIB_USE_INTRINSIC_GUESS)
+                {
+                    options.cameraFocalLengthGuessX =
+                        fisheyeFocalLengthGuessX(options.common.imageSize.width);
+                    options.cameraFocalLengthGuessY =
+                        fisheyeFocalLengthGuessY(options.common.imageSize.height);
+                    yCInfo(STEREOCALIBRATIONTHREAD)
+                        << "Using fisheye intrinsic focal-length guess: fx ="
+                        << options.cameraFocalLengthGuessX << "px, fy ="
+                        << options.cameraFocalLengthGuessY << "px for"
+                        << options.common.imageSize.width << "x"
+                        << options.common.imageSize.height;
+                }
                 success = _fisheyeCalibrationEngine.calibrate(
                     observationSnapshot,
                     options,
