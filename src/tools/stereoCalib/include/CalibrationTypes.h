@@ -174,7 +174,8 @@ namespace stereo_calib
     struct FisheyeCalibrationOptions
     {
         CommonCalibrationOptions common;
-        double cameraFocalLengthGuess{625.0};
+        double cameraFocalLengthGuessX{625.0};
+        double cameraFocalLengthGuessY{625.0};
 
         int monocularFlags{
             cv::fisheye::CALIB_USE_INTRINSIC_GUESS |
@@ -200,6 +201,9 @@ namespace stereo_calib
         {
             return (common.imageSize.width > 0 &&
                 common.imageSize.height > 0 &&
+                (!(monocularFlags & cv::fisheye::CALIB_USE_INTRINSIC_GUESS) ||
+                 (std::isfinite(cameraFocalLengthGuessX) && cameraFocalLengthGuessX > 0.0 &&
+                  std::isfinite(cameraFocalLengthGuessY) && cameraFocalLengthGuessY > 0.0)) &&
                 (!(criteria.type & cv::TermCriteria::COUNT) || criteria.maxCount > 0) &&
                 (!(criteria.type & cv::TermCriteria::EPS) ||
                  (std::isfinite(criteria.epsilon) && criteria.epsilon > 0.0)));
