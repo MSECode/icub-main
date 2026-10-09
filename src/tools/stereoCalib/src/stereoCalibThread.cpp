@@ -19,8 +19,8 @@ namespace
     // sensor dimensions remain the correct basis for every stream size.
     constexpr double fisheyeLensFocalLengthMillimeters = 2.5;
     constexpr double imx678PixelPitchMillimeters = 0.002;
-    constexpr double imx678ActiveWidthPixels = 3840.0;
-    constexpr double imx678ActiveHeightPixels = 2160.0;
+    constexpr double imx678ActiveWidthPixels = 2160.0;
+    constexpr double imx678ActiveHeightPixels = 3840.0;
 
     double fisheyeFocalLengthGuessX(int imageWidth)
     {
