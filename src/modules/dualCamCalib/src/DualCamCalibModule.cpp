@@ -6,6 +6,10 @@
 
 #include <iCub/DualCamCalibModule.h>
 #include <yarp/os/Network.h>
+#include <yarp/os/Property.h>
+
+#include <algorithm>
+#include <cstring>
 
 using namespace std;
 using namespace yarp::os;
@@ -74,26 +78,30 @@ bool CamCalibModule::configure(yarp::os::ResourceFinder &rf)
         return false;
     }
 
-    string calibToolLeftName  = botLeftConfig.check("projection", Value("pinhole"), "Projection/mapping applied to calibrated image [projection|spherical] (string).").asString().c_str();
-    string calibToolRightName = botRightConfig.check("projection", Value("pinhole"), "Projection/mapping applied to calibrated image [projection|spherical] (string).").asString().c_str();
+    string calibToolLeftName  = botLeftConfig.check("projection", Value("pinhole"), "Projection/mapping applied to calibrated image [projection|spherical|fisheye] (string).").asString().c_str();
+    string calibToolRightName = botRightConfig.check("projection", Value("pinhole"), "Projection/mapping applied to calibrated image [projection|spherical|fisheye] (string).").asString().c_str();
+
+    // Stereo fisheye rectification needs both cameras and the stereo transform.
+    Property stereoConfig;
+    stereoConfig.fromString(rf.toString());
 
     calibToolLeft = CalibToolFactories::getPool().get(calibToolLeftName.c_str());
-    if (calibToolLeft!=NULL)
-    {
-        bool ok = calibToolLeft->open(botLeftConfig);
-        if (!ok)
-        {
+    if (calibToolLeft!=NULL) {
+        stereoConfig.put("group", strLeftGroup);
+        bool ok = calibToolLeftName == "fisheye" ? calibToolLeft->open(stereoConfig)
+                                                : calibToolLeft->open(botLeftConfig);
+        if (!ok) {
             delete calibToolLeft;
             calibToolLeft = NULL;
             return false;
         }
     }
     calibToolRight = CalibToolFactories::getPool().get(calibToolRightName.c_str());
-    if (calibToolRight!=NULL)
-    {
-        bool ok = calibToolRight->open(botRightConfig);
-        if (!ok)
-        {
+    if (calibToolRight!=NULL) {
+        stereoConfig.put("group", strRightGroup);
+        bool ok = calibToolRightName == "fisheye" ? calibToolRight->open(stereoConfig)
+                                                 : calibToolRight->open(botRightConfig);
+        if (!ok) {
             delete calibToolRight;
             calibToolRight = NULL;
             return false;
@@ -187,13 +195,9 @@ bool CamCalibModule::updateModule()
 {
     bool lready=false;
     bool rready=false;
-    bool init=false;
 
     int dual_rowsize_pixels, dual_height_pixels, single_rowsize_pixels;
     int dual_rowsize_bytes,  single_rowsize_bytes;
-
-    int outw = 0;
-    int outh = 0;
 
     unsigned char *left_raw, *right_raw, *dual_raw;
 
@@ -236,110 +240,57 @@ bool CamCalibModule::updateModule()
         rightImage = imageInRight.read(false);
     }
 
-    yarp::sig::ImageOf<yarp::sig::PixelRgb> &calibratedImgOut=imageOut.prepare();
-
-    if (calibToolLeft!=NULL && leftImage!=NULL)
+    if (calibToolLeft!=NULL && leftImage!=NULL && leftImage->width()>0 && leftImage->height()>0)
     {
         calibToolLeft->apply(*leftImage,calibratedImgLeft);
         lready=true;
-
-        if (init==false)
-        {
-            if (align == ALIGN_WIDTH)
-            {
-                outw = calibratedImgLeft.width()*2;
-                outh = calibratedImgLeft.height();
-            }
-            else if (align==ALIGN_HEIGHT)
-            {
-                outw = calibratedImgLeft.width();
-                outh = calibratedImgLeft.height()*2;
-            }
-            else
-            {
-                yError() << "Invalid alignment";
-            }
-            calibratedImgOut.copy(calibratedImgLeft,outw,outh);
-            init=true;
-        }
-
-        calibratedImgOut.resize(outw, outh);
-        for (int r=0; r<calibratedImgLeft.height(); r++)
-        for (int c=0; c<calibratedImgLeft.width(); c++)
-        {
-            unsigned char *pixel = calibratedImgOut.getPixelAddress(c,r);
-
-            pixel[0] = *(calibratedImgLeft.getPixelAddress(c,r)+0);
-            pixel[1] = *(calibratedImgLeft.getPixelAddress(c,r)+1);
-            pixel[2] = *(calibratedImgLeft.getPixelAddress(c,r)+2);
-        }
-
     }
-    if (calibToolRight!=NULL && rightImage!=NULL)
+    if (calibToolRight!=NULL && rightImage!=NULL && rightImage->width()>0 && rightImage->height()>0)
     {
         calibToolRight->apply(*rightImage,calibratedImgRight);
         rready=true;
-
-        if (init==false)
-        {
-            int outw = 0;
-            int outh = 0;
-            if (align == ALIGN_WIDTH)
-            {
-                outw = calibratedImgLeft.width()*2;
-                outh = calibratedImgLeft.height();
-            }
-            else if (align==ALIGN_HEIGHT)
-            {
-                outw = calibratedImgLeft.width();
-                outh = calibratedImgLeft.height()*2;
-            }
-            else
-            {
-                yError() << "Invalid alignment";
-            }
-            calibratedImgOut.copy(calibratedImgRight,outw,outh);
-            init=true;
-        }
-
-        for (int r=0; r<calibratedImgLeft.height(); r++)
-        for (int c=0; c<calibratedImgLeft.width(); c++)
-        {
-            int cp = 0;
-            int rp = 0;
-            if      (align == ALIGN_WIDTH)  {cp = c+calibratedImgLeft.width();  rp = r;}
-            else if (align == ALIGN_HEIGHT) {cp = c; rp = r+calibratedImgLeft.height();}
-            unsigned char *pixel = calibratedImgOut.getPixelAddress(cp,rp);
-            pixel[0] = *(calibratedImgRight.getPixelAddress(c,r)+0);
-            pixel[1] = *(calibratedImgRight.getPixelAddress(c,r)+1);
-            pixel[2] = *(calibratedImgRight.getPixelAddress(c,r)+2);
-        }
     }
 
+    // Keep the last calibrated frame from each input: the cameras arrive independently.
+    const int frameWidth = std::max(calibratedImgLeft.width(), calibratedImgRight.width());
+    const int frameHeight = std::max(calibratedImgLeft.height(), calibratedImgRight.height());
+    if (frameWidth<=0 || frameHeight<=0)
+        return true;
+
+    const double now = yarp::os::Time::now();
     if (requested_fps==0)
     {
-        if (lready==true || rready==true)
-        {
-            imageOut.writeStrict();
-            double diffOut = yarp::os::Time::now() -time_lastOut;
-            time_lastOut = yarp::os::Time::now();
-            if (verboseExecTime) yDebug ("%f", diffOut);
-            lready=false;
-            rready=false;
-        }
+        if (!lready && !rready)
+            return true;
     }
-    else
+    else if (now-time_lastOut<=1/requested_fps)
     {
-        double diffOut = yarp::os::Time::now() - time_lastOut;
-        if (diffOut>(1/requested_fps))
-        {
-            imageOut.writeStrict();
-            time_lastOut = yarp::os::Time::now();
-            if (verboseExecTime) yDebug ("%f", diffOut);
-            lready=false;
-            rready=false;
-        }
+        return true;
     }
+
+    const int outw = align==ALIGN_WIDTH ? frameWidth*2 : frameWidth;
+    const int outh = align==ALIGN_HEIGHT ? frameHeight*2 : frameHeight;
+    yarp::sig::ImageOf<yarp::sig::PixelRgb>& calibratedImgOut = imageOut.prepare();
+    calibratedImgOut.resize(outw, outh);
+    calibratedImgOut.zero();
+
+    auto copyFrame = [&](const yarp::sig::ImageOf<yarp::sig::PixelRgb>& image, int x, int y)
+    {
+        if (image.width()==0 || image.height()==0)
+            return;
+        for (int row=0; row<image.height(); ++row)
+        {
+            std::memcpy(calibratedImgOut.getPixelAddress(x,y+row),
+                        image.getPixelAddress(0,row), image.width()*image.getPixelSize());
+        }
+    };
+    copyFrame(calibratedImgLeft, 0, 0);
+    copyFrame(calibratedImgRight, align==ALIGN_WIDTH ? frameWidth : 0,
+                                 align==ALIGN_HEIGHT ? frameHeight : 0);
+
+    imageOut.writeStrict();
+    if (verboseExecTime) yDebug ("%f", now-time_lastOut);
+    time_lastOut=now;
 
     return true;
 }

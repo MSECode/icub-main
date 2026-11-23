@@ -14,6 +14,7 @@
 #include <iCub/PinholeCalibTool.h>
 #include <iCub/SphericalCalibTool.h>
 #include <iCub/DualCamCalibModule.h>
+#include <iCub/FisheyeCalibTool.h>
 
 // OpenCV
 #include <opencv2/core/core_c.h>
@@ -28,6 +29,7 @@ int main(int argc, char *argv[]) {
     CalibToolFactories& pool = CalibToolFactories::getPool();
     pool.add(new CalibToolFactoryOf<PinholeCalibTool>("pinhole"));
     pool.add(new CalibToolFactoryOf<SphericalCalibTool>("spherical"));
+    pool.add(new CalibToolFactoryOf<FisheyeCalibTool>("fisheye"));
 
     Network yarp;
     ResourceFinder rf;
