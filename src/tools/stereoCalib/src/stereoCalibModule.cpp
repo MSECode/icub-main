@@ -91,6 +91,12 @@ bool stereoCalibModule::respond(const Bottle& command, Bottle& reply)
         reply.addInt64(status.droppedLeftFrames);
         reply.addString("droppedRightFrames");
         reply.addInt64(status.droppedRightFrames);
+        reply.addString("acceptedObservations");
+        reply.addInt64(status.acceptedObservations);
+        reply.addString("rejectedDetections");
+        reply.addInt64(status.rejectedDetections);
+        reply.addString("collectionReady");
+        reply.addInt32(status.collectionReady ? 1 : 0);
         reply.addString("meanTimestampDeltaMs");
         reply.addFloat64(status.meanTimestampDeltaMs);
         reply.addString("maxTimestampDeltaMs");

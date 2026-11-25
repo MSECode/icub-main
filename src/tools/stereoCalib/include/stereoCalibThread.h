@@ -71,6 +71,9 @@ struct StereoCalibStatus
     std::size_t pairedFrames{0};
     std::size_t droppedLeftFrames{0};
     std::size_t droppedRightFrames{0};
+    std::size_t acceptedObservations{0};
+    std::size_t rejectedDetections{0};
+    bool collectionReady{false};
 
     double meanTimestampDeltaMs{0.0};
     double maxTimestampDeltaMs{0.0};
@@ -166,6 +169,7 @@ private:
     stereo_calib::ChessboardConfiguration _chessboardConfiguration;
     std::vector<stereo_calib::StereoObservation> _observations;
     std::size_t _rejectedDetections{0};
+    bool _collectionReady{false};
 
     stereo_calib::CameraModel _cameraModel{stereo_calib::CameraModel::Pinhole};
     stereo_calib::CalibrationMode _calibrationMode{stereo_calib::CalibrationMode::StereoFull};

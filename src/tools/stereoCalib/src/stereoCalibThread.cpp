@@ -328,8 +328,8 @@ stereoCalibThread::stereoCalibThread(ResourceFinder &rf, Port* commPort, const c
     // TODO: remove as well --> duplication
     _chessboardConfiguration.squareSizeMeters = this->squareSize;
 
-    _saveImages = stereoCalibOpts.check("saveImages", Value(1)).asInt32() != 0;
-    _drawDiagnosticCorners = stereoCalibOpts.check("drawDiagnosticCorners", Value(1)).asInt32() != 0;
+    _saveImages = stereoCalibOpts.check("saveImages", Value(false)).asBool();
+    _drawDiagnosticCorners = stereoCalibOpts.check("drawDiagnosticCorners", Value(true)).asBool();
     _cameraModel = parseCameraModel(stereoCalibOpts.check("cameraModel", Value("pinhole")).asString());
     _calibrationMode = parseCalibrationMode(stereoCalibOpts.check("calibrationMode", Value("StereoFull")).asString());
 
@@ -485,15 +485,12 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
     if(boardType == "CIRCLES_GRID") {
         foundL = findCirclesGrid(LeftRgb, boardSize, leftCorners, CALIB_CB_SYMMETRIC_GRID  | CALIB_CB_CLUSTERING);
         foundR = findCirclesGrid(RightRgb, boardSize, rightCorners, CALIB_CB_SYMMETRIC_GRID  | CALIB_CB_CLUSTERING);
-        yCWarning(STEREOCALIBRATIONTHREAD) << "Board type:" << boardType << "not yet implemented.";
     } else if(boardType == "ASYMMETRIC_CIRCLES_GRID") {
         foundL = findCirclesGrid(LeftRgb, boardSize, leftCorners, CALIB_CB_ASYMMETRIC_GRID | CALIB_CB_CLUSTERING);
         foundR = findCirclesGrid(RightRgb, boardSize, rightCorners, CALIB_CB_ASYMMETRIC_GRID | CALIB_CB_CLUSTERING);
-        yCWarning(STEREOCALIBRATIONTHREAD) << "Board type:" << boardType << "not yet implemented.";
     } else if(boardType == "CHESSBOARD_SECTOR_BASED") {
         foundL = findChessboardCornersSB(leftGray, boardSize, leftCorners);
         foundR = findChessboardCornersSB(rightGray, boardSize, rightCorners);
-        yCWarning(STEREOCALIBRATIONTHREAD) << "Board type:" << boardType << "not yet implemented.";
     } else {
         foundL = findChessboardCorners(leftGray, boardSize, leftCorners, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_FILTER_QUADS);
         foundR = findChessboardCorners(rightGray, boardSize, rightCorners, CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE | CALIB_CB_FILTER_QUADS);
@@ -522,7 +519,10 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
                        << "Each board must span at least" << (minimumBoardSpanRatio * 100.0)
                        << "% of both image dimensions.";
             
-            ++_rejectedDetections;
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                ++_rejectedDetections;
+            }
             return;
         }
 
@@ -549,12 +549,18 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
         if(!observation.isValid())
         {
             yCError(STEREOCALIBRATIONTHREAD) << "Generated invalid stereo observation";
-            ++_rejectedDetections;
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                ++_rejectedDetections;
+            }
             return;
         }
 
         std::size_t observationIndex = 0;
-        observationIndex = _observations.size();
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            observationIndex = _observations.size();
+        }
 
         // Raw images are saved before drawing any optional diagnostics and
         // only after the pair has become an accepted observation candidate.
@@ -614,7 +620,10 @@ void stereoCalibThread::processSynchronizedPair(SynchronizedPair& pair, Size boa
     }
     else
     {
-        ++_rejectedDetections;
+        {
+            std::lock_guard<std::mutex> lock(mtx);
+            ++_rejectedDetections;
+        }
     }
 
    return;
@@ -625,6 +634,10 @@ StereoCalibStatus stereoCalibThread::getStatus() const
     StereoCalibStatus result;
 
     std::lock_guard<std::mutex> lock(mtx);
+    result.acceptedObservations = _observations.size();
+    result.rejectedDetections = _rejectedDetections;
+    result.collectionReady = calibrationState.load() == CalibrationState::Collecting &&
+                             _collectionReady;
     
     switch(calibrationState.load())
     {
@@ -724,10 +737,11 @@ void stereoCalibThread::stereoCalibRun()
             synchronizer.reset();
             lastProcessedCandidateTime = -1.0;
             _expectedImageSize = {};
-            _observations.clear();
-            _rejectedDetections = 0;
             {
                 std::lock_guard<std::mutex> lock(mtx);
+                _observations.clear();
+                _rejectedDetections = 0;
+                _collectionReady = calibrationState.load() == CalibrationState::Collecting;
                 _calibrationResults = stereo_calib::CalibrationResult{};
                 _calibrationError.clear();
             }
@@ -879,7 +893,10 @@ void stereoCalibThread::stereoCalibRun()
             }
 
             const auto syncStats = synchronizer.getStatistics();
-            calibrationResult.quality.rejectedDetections = _rejectedDetections;
+            {
+                std::lock_guard<std::mutex> lock(mtx);
+                calibrationResult.quality.rejectedDetections = _rejectedDetections;
+            }
             calibrationResult.quality.acceptedObservations = observationSnapshot.size();
             calibrationResult.quality.synchronizedPairs = syncStats.pairedFrames;
             if(syncStats.pairedFrames > 0)
@@ -972,6 +989,7 @@ void stereoCalibThread::startCalib() {
 
     _calibrationResults = stereo_calib::CalibrationResult{};
     _calibrationError.clear();
+    _collectionReady = false;
     calibrationState.store(CalibrationState::Collecting);
     collectionResetRequested.store(true);
 
@@ -987,6 +1005,7 @@ void stereoCalibThread::stopCalib() {
         return;
     }
     calibrationState.store(CalibrationState::Idle);
+    _collectionReady = false;
     collectionResetRequested.store(true);
 
     yCInfo(STEREOCALIBRATIONTHREAD) << "Calibration collection stopped";
